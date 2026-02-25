@@ -1,0 +1,26 @@
+{
+  "name": "@ianalloway/kelly-js",
+  "version": "1.0.0",
+  "description": "Kelly Criterion calculator for sports betting & investing — CLV, EV, bankroll management. Zero dependencies.",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": ["kelly", "criterion", "sports-betting", "bankroll", "clv", "expected-value", "gambling"],
+  "author": "Ian Alloway <ian@allowayllc.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
