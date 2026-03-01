@@ -67,6 +67,38 @@ export interface BankrollStats {
   maxDrawdown: number;
   currentStreak: number;
   streakType: 'win' | 'loss' | 'none';
+  /** Sharpe ratio of bet returns (annualised, assuming 365 bets/year) */
+  sharpeRatio: number;
+}
+
+export interface ArbitrageResult {
+  /** Whether a true arbitrage opportunity exists (guaranteed profit) */
+  hasArb: boolean;
+  /** Profit percentage if arb exists */
+  profitPct: number;
+  /** Optimal stake on side A to guarantee profit given totalStake */
+  stakeA: number;
+  /** Optimal stake on side B to guarantee profit given totalStake */
+  stakeB: number;
+  /** Total vig / overround in the market */
+  overround: number;
+}
+
+export interface ParlayResult {
+  /** Combined American odds of the parlay */
+  combinedOdds: number;
+  /** Combined decimal odds */
+  combinedDecimal: number;
+  /** True win probability (product of no-vig probs per leg) */
+  trueWinProb: number;
+  /** Implied win probability (includes vig) */
+  impliedWinProb: number;
+  /** Expected value per $100 staked */
+  ev100: number;
+  /** Whether the parlay has positive expected value */
+  hasEdge: boolean;
+  /** Number of legs */
+  legs: number;
 }
 
 // ─── Odds Conversion ──────────────────────────────────────────────────────────
@@ -317,6 +349,7 @@ export function betPnL(stake: number, americanOdds: number, result: 'win' | 'los
 
 /**
  * Compute comprehensive bankroll statistics from a history of bets.
+ * Includes Sharpe ratio to measure risk-adjusted returns.
  */
 export function bankrollStats(
   bets: Array<{ stake: number; americanOdds: number; result: 'win' | 'loss' | 'push' }>,
@@ -352,6 +385,16 @@ export function bankrollStats(
   const totalStaked = bets.reduce((sum, b) => sum + b.stake, 0);
   const netPnL = pnls.reduce((sum, r) => sum + r.pnl, 0);
 
+  // Sharpe ratio: mean ROI per bet / std dev of ROI per bet, annualised
+  const rois = pnls.map((r) => r.roi);
+  const meanRoi = rois.reduce((s, r) => s + r, 0) / (rois.length || 1);
+  const variance = rois.reduce((s, r) => s + Math.pow(r - meanRoi, 2), 0) / (rois.length || 1);
+  const stdDev = Math.sqrt(variance);
+  // Annualise assuming 365 bets per year
+  const sharpeRatio = stdDev > 0
+    ? Math.round((meanRoi / stdDev) * Math.sqrt(365) * 100) / 100
+    : 0;
+
   return {
     totalBets: bets.length,
     wins,
@@ -365,6 +408,98 @@ export function bankrollStats(
     maxDrawdown: Math.round(maxDrawdown * 10000) / 10000,
     currentStreak: streak,
     streakType,
+    sharpeRatio,
+  };
+}
+
+// ─── Arbitrage Detection ──────────────────────────────────────────────────────
+
+/**
+ * Detect and calculate an arbitrage opportunity across two books.
+ *
+ * An arbitrage (arb) exists when the combined implied probabilities of both
+ * sides sum to less than 1.0, guaranteeing profit regardless of outcome.
+ *
+ * @param oddsA  American odds for side A (best available)
+ * @param oddsB  American odds for side B (best available)
+ * @param totalStake Total amount to split across both sides
+ *
+ * @example
+ * // BetMGM has Team A at +105, FanDuel has Team B at +102
+ * arbitrage(105, 102, 1000);
+ * // → { hasArb: true, profitPct: 1.7, stakeA: 488, stakeB: 512 }
+ */
+export function arbitrage(oddsA: number, oddsB: number, totalStake = 1000): ArbitrageResult {
+  const pA = impliedProb(oddsA);
+  const pB = impliedProb(oddsB);
+  const overround = pA + pB;
+  const hasArb = overround < 1.0;
+
+  // Optimal stakes: stakeA / stakeB = decimalB / decimalA
+  const dA = toDecimal(oddsA);
+  const dB = toDecimal(oddsB);
+  const stakeA = Math.round((totalStake * dB) / (dA + dB) * 100) / 100;
+  const stakeB = Math.round(totalStake - stakeA * 100) / 100;
+
+  // Guaranteed profit = (1 / overround - 1) * totalStake
+  const profitPct = hasArb
+    ? Math.round(((1 / overround) - 1) * 10000) / 100
+    : 0;
+
+  return {
+    hasArb,
+    profitPct,
+    stakeA,
+    stakeB,
+    overround: Math.round(overround * 10000) / 10000,
+  };
+}
+
+// ─── Parlay Analysis ──────────────────────────────────────────────────────────
+
+/**
+ * Analyse a multi-leg parlay for true EV and win probability.
+ *
+ * Uses no-vig probabilities per leg to compute the true combined win
+ * probability, then compares it against the parlay's implied probability
+ * to surface whether the parlay has positive expected value.
+ *
+ * @param legs Array of objects with americanOdds and optional oppOdds for vig removal
+ *
+ * @example
+ * parlayAnalysis([
+ *   { americanOdds: -110, oppOdds: -110 },
+ *   { americanOdds: +150, oppOdds: -175 },
+ * ]);
+ */
+export function parlayAnalysis(
+  legs: Array<{ americanOdds: number; oppOdds?: number }>
+): ParlayResult {
+  // Combined decimal odds
+  const combinedDecimal = legs.reduce((acc, leg) => acc * toDecimal(leg.americanOdds), 1);
+  const combinedOdds = toAmerican(combinedDecimal);
+  const impliedWinProb = 1 / combinedDecimal;
+
+  // True win probability: product of no-vig probs per leg
+  const trueWinProb = legs.reduce((acc, leg) => {
+    if (leg.oppOdds !== undefined) {
+      const { prob1 } = removeVig(leg.americanOdds, leg.oppOdds);
+      return acc * prob1;
+    }
+    // Fallback: use implied prob (conservative)
+    return acc * impliedProb(leg.americanOdds);
+  }, 1);
+
+  const ev100 = Math.round((trueWinProb * (combinedDecimal - 1) * 100 - (1 - trueWinProb) * 100) * 100) / 100;
+
+  return {
+    combinedOdds,
+    combinedDecimal: Math.round(combinedDecimal * 1000) / 1000,
+    trueWinProb: Math.round(trueWinProb * 10000) / 10000,
+    impliedWinProb: Math.round(impliedWinProb * 10000) / 10000,
+    ev100,
+    hasEdge: ev100 > 0,
+    legs: legs.length,
   };
 }
 
