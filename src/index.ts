@@ -117,6 +117,7 @@ export function impliedProb(american: number): number {
  * @example toDecimal(-110) // 1.909
  */
 export function toDecimal(american: number): number {
+  if (american === 0) throw new RangeError('American odds cannot be zero');
   if (american > 0) return american / 100 + 1;
   return 100 / Math.abs(american) + 1;
 }
@@ -126,6 +127,7 @@ export function toDecimal(american: number): number {
  * @example toAmerican(1.909) // -110
  */
 export function toAmerican(decimal: number): number {
+  if (decimal <= 1) throw new RangeError('Decimal odds must be greater than 1');
   if (decimal >= 2) return Math.round((decimal - 1) * 100);
   return Math.round(-100 / (decimal - 1));
 }
@@ -305,6 +307,15 @@ export function clvSummary(
   verdict: string;
   totalBets: number;
 } {
+  if (bets.length === 0) {
+    return {
+      avgCLV: 0,
+      beatCloseRate: 0,
+      verdict: '⚪ Neutral — shopping more books may help',
+      totalBets: 0,
+    };
+  }
+
   const results = bets.map((b) => clv(b.openLine, b.closeLine));
   const avgCLV = results.reduce((sum, r) => sum + r.clvPercent, 0) / results.length;
   const beatCloseRate = results.filter((r) => r.beatClose).length / results.length;
@@ -439,7 +450,7 @@ export function arbitrage(oddsA: number, oddsB: number, totalStake = 1000): Arbi
   const dA = toDecimal(oddsA);
   const dB = toDecimal(oddsB);
   const stakeA = Math.round((totalStake * dB) / (dA + dB) * 100) / 100;
-  const stakeB = Math.round(totalStake - stakeA * 100) / 100;
+  const stakeB = Math.round((totalStake - stakeA) * 100) / 100;
 
   // Guaranteed profit = (1 / overround - 1) * totalStake
   const profitPct = hasArb

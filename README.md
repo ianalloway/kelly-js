@@ -5,6 +5,9 @@
 [![npm](https://img.shields.io/npm/v/@ianalloway/kelly-js?style=for-the-badge)](https://www.npmjs.com/package/@ianalloway/kelly-js)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
+[![Tests](https://img.shields.io/badge/Tests-Jest-success?style=for-the-badge)](jest.config.js)
+
+> **New:** Comprehensive Jest test suite with 60+ tests covering Kelly sizing, odds conversion, arbitrage detection, bankroll tracking, and edge cases. See [src/index.test.ts](src/index.test.ts).
 
 ```ts
 import { kelly, clv, bankrollStats } from '@ianalloway/kelly-js';
@@ -175,6 +178,28 @@ stackBonus(33.8, 29.8) // 1.04 — extra projected pts from correlation
 - Positive = you got better implied prob than close (beat the market)
 
 **EV Formula:** `EV = (b × p) - q`
+
+## Testing & Quality
+
+This library includes comprehensive Jest test coverage for all major functions:
+
+```bash
+npm test
+```
+
+Tests cover:
+- **Kelly Criterion:** Normal cases, edge cases (0 prob, 1 prob, extreme odds), dollar calculations
+- **Odds Conversion:** Bidirectional conversions, extreme odds, consistency checks
+- **Arbitrage Detection:** True arbs, no-arb scenarios, accurate stake calculations with fixed rounding
+- **Bankroll Stats:** Empty arrays (no divide-by-zero), single/multiple bets, Sharpe ratio, streaks, drawdown
+- **CLV Analysis:** Empty arrays, single/multiple bets, verdict assignment
+- **Parlay Analysis:** Multi-leg parlays, vig removal, EV detection
+- **Input Validation:** Zero-check guards in odds conversion, probability bounds enforcement
+
+### Notable Fixes
+- **Arbitrage Rounding:** Fixed critical bug where `Math.round(totalStake - stakeA * 100) / 100` was calculating incorrectly. Now properly uses `Math.round((totalStake - stakeA) * 100) / 100`.
+- **Empty Array Guards:** `bankrollStats()` and `clvSummary()` now safely handle empty bet arrays.
+- **Zero Checks:** `toDecimal()` and `toAmerican()` validate inputs and throw on invalid odds.
 
 ## Author
 
