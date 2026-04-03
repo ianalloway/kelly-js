@@ -1,19 +1,14 @@
 ---
-name: Feature Request
-about: Got an idea? Let's build it
+name: Feature request
+about: Suggest an improvement
 title: '[FEAT] '
 labels: enhancement
-assignees: ianalloway
 ---
 
-## The Problem
-<!-- What problem does this solve? -->
+## Problem
 
-## Proposed Solution
-<!-- How should it work? -->
+## Proposed solution
 
-## Alternatives Considered
-<!-- Any other approaches you thought about? -->
+## Alternatives
 
-## Additional Context
-<!-- Mockups, examples, links, etc. -->
+## Context

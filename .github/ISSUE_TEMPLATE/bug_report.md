@@ -1,29 +1,19 @@
 ---
-name: Bug Report
-about: Something broke — let's fix it
+name: Bug report
+about: Report something that is not working
 title: '[BUG] '
 labels: bug
-assignees: ianalloway
 ---
 
 ## Description
-<!-- What went wrong? -->
 
-## Steps to Reproduce
-1. 
-2. 
-3. 
+## Steps to reproduce
 
-## Expected Behavior
-<!-- What should have happened -->
+1.
+2.
 
-## Actual Behavior
-<!-- What actually happened -->
+## Expected vs actual
 
 ## Environment
-- OS: 
-- Version: 
-- Node/Python version: 
 
-## Additional Context
-<!-- Logs, screenshots, anything else relevant -->
+## Additional context
