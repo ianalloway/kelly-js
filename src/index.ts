@@ -232,14 +232,29 @@ export function kelly(winProbability: number, americanOdds: number): KellyResult
  * Kelly sizing with multiple simultaneous bets (fractional Kelly portfolio).
  * Scales each bet so the total portfolio exposure stays within max exposure.
  */
+/**
+ * Kelly sizing with multiple simultaneous bets (fractional Kelly portfolio).
+ * Scales each bet so the total portfolio exposure stays within max exposure.
+ * Supports individual fractional Kelly multipliers per bet.
+ */
 export function kellyPortfolio(
-  bets: Array<{ winProbability: number; americanOdds: number; label?: string }>,
+  bets: Array<{ 
+    winProbability: number; 
+    americanOdds: number; 
+    label?: string;
+    multiplier?: number; // Optional fractional Kelly multiplier (e.g. 0.5 for half-Kelly)
+  }>,
   maxExposure = 0.25
 ): Array<{ label: string; fraction: number; dollars: (bankroll: number) => number; ev: number }> {
-  const results = bets.map((bet, i) => ({
-    label: bet.label ?? `Bet ${i + 1}`,
-    ...kelly(bet.winProbability, bet.americanOdds),
-  }));
+  const results = bets.map((bet, i) => {
+    const k = kelly(bet.winProbability, bet.americanOdds);
+    const multiplier = bet.multiplier ?? 1;
+    return {
+      label: bet.label ?? `Bet ${i + 1}`,
+      ...k,
+      fraction: k.fraction * multiplier,
+    };
+  });
 
   const totalFraction = results.reduce((sum, r) => sum + r.fraction, 0);
   const scale = totalFraction > maxExposure ? maxExposure / totalFraction : 1;
@@ -247,9 +262,35 @@ export function kellyPortfolio(
   return results.map((r) => ({
     label: r.label,
     fraction: Math.round(r.fraction * scale * 10000) / 10000,
-    dollars: (bankroll: number) => Math.round(bankroll * r.fraction * scale * 100) / 100,
+    dollars: (bankroll: number) => {
+      if (!Number.isFinite(bankroll) || bankroll < 0) throw new RangeError('bankroll must be a finite non-negative number');
+      return Math.round(bankroll * r.fraction * scale * 100) / 100;
+    },
     ev: r.ev,
   }));
+}
+
+/**
+ * Calculate the optimal fractional Kelly multiplier to maximize growth 
+ * given a specific constraint on the probability of a drawdown.
+ * 
+ * @param edge The edge (EV per unit staked)
+ * @param variance The variance of the returns
+ * @param maxDrawdown The maximum drawdown allowed (e.g. 0.5 for 50%)
+ * @param riskOfDrawdown The desired probability of hitting that drawdown (e.g. 0.1 for 10%)
+ */
+export function optimalFractionalKelly(
+  edge: number,
+  variance: number,
+  maxDrawdown: number,
+  riskOfDrawdown = 0.1
+): number {
+  if (edge <= 0) return 0;
+  // Based on the formula: f = (2 * edge / variance) * (ln(riskOfDrawdown) / ln(1 - maxDrawdown))
+  // Simplified version for betting: f = edge / variance
+  const fullKelly = edge / variance;
+  const multiplier = Math.log(riskOfDrawdown) / (Math.log(1 - maxDrawdown) * (2 * edge / variance));
+  return Math.max(0, Math.min(1, multiplier));
 }
 
 // ─── Expected Value ───────────────────────────────────────────────────────────
@@ -768,14 +809,29 @@ export function kelly(winProbability: number, americanOdds: number): KellyResult
  * Kelly sizing with multiple simultaneous bets (fractional Kelly portfolio).
  * Scales each bet so the total portfolio exposure stays within max exposure.
  */
+/**
+ * Kelly sizing with multiple simultaneous bets (fractional Kelly portfolio).
+ * Scales each bet so the total portfolio exposure stays within max exposure.
+ * Supports individual fractional Kelly multipliers per bet.
+ */
 export function kellyPortfolio(
-  bets: Array<{ winProbability: number; americanOdds: number; label?: string }>,
+  bets: Array<{ 
+    winProbability: number; 
+    americanOdds: number; 
+    label?: string;
+    multiplier?: number; // Optional fractional Kelly multiplier (e.g. 0.5 for half-Kelly)
+  }>,
   maxExposure = 0.25
 ): Array<{ label: string; fraction: number; dollars: (bankroll: number) => number; ev: number }> {
-  const results = bets.map((bet, i) => ({
-    label: bet.label ?? `Bet ${i + 1}`,
-    ...kelly(bet.winProbability, bet.americanOdds),
-  }));
+  const results = bets.map((bet, i) => {
+    const k = kelly(bet.winProbability, bet.americanOdds);
+    const multiplier = bet.multiplier ?? 1;
+    return {
+      label: bet.label ?? `Bet ${i + 1}`,
+      ...k,
+      fraction: k.fraction * multiplier,
+    };
+  });
 
   const totalFraction = results.reduce((sum, r) => sum + r.fraction, 0);
   const scale = totalFraction > maxExposure ? maxExposure / totalFraction : 1;
@@ -783,9 +839,35 @@ export function kellyPortfolio(
   return results.map((r) => ({
     label: r.label,
     fraction: Math.round(r.fraction * scale * 10000) / 10000,
-    dollars: (bankroll: number) => Math.round(bankroll * r.fraction * scale * 100) / 100,
+    dollars: (bankroll: number) => {
+      if (!Number.isFinite(bankroll) || bankroll < 0) throw new RangeError('bankroll must be a finite non-negative number');
+      return Math.round(bankroll * r.fraction * scale * 100) / 100;
+    },
     ev: r.ev,
   }));
+}
+
+/**
+ * Calculate the optimal fractional Kelly multiplier to maximize growth 
+ * given a specific constraint on the probability of a drawdown.
+ * 
+ * @param edge The edge (EV per unit staked)
+ * @param variance The variance of the returns
+ * @param maxDrawdown The maximum drawdown allowed (e.g. 0.5 for 50%)
+ * @param riskOfDrawdown The desired probability of hitting that drawdown (e.g. 0.1 for 10%)
+ */
+export function optimalFractionalKelly(
+  edge: number,
+  variance: number,
+  maxDrawdown: number,
+  riskOfDrawdown = 0.1
+): number {
+  if (edge <= 0) return 0;
+  // Based on the formula: f = (2 * edge / variance) * (ln(riskOfDrawdown) / ln(1 - maxDrawdown))
+  // Simplified version for betting: f = edge / variance
+  const fullKelly = edge / variance;
+  const multiplier = Math.log(riskOfDrawdown) / (Math.log(1 - maxDrawdown) * (2 * edge / variance));
+  return Math.max(0, Math.min(1, multiplier));
 }
 
 // ─── Expected Value ───────────────────────────────────────────────────────────
