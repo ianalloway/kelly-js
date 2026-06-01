@@ -7,24 +7,19 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 [![Tests](https://img.shields.io/badge/Tests-Jest-success?style=for-the-badge)](jest.config.js)
 
-> **New:** Comprehensive Jest test suite with 60+ tests covering Kelly sizing, odds conversion, arbitrage detection, bankroll tracking, and edge cases. See [src/index.test.ts](src/index.test.ts).
-
 ```ts
 import { kelly, clv, bankrollStats } from '@ianalloway/kelly-js';
 
-// Size a bet
 const k = kelly(0.58, -110);
 console.log(k.fraction);         // 0.0714
 console.log(k.halfDollars(1000)) // $35.71
 
-// Measure your edge
-const c = clv(-108, -115);       // you bet -108, closed -115
-console.log(c.verdict);          // 'positive' — you beat the market
+const c = clv(-108, -115);
+console.log(c.verdict);          // 'positive'
 
-// Bankroll health check
 const stats = bankrollStats(myBets, 1000);
-console.log(stats.roi);          // +0.054 (+5.4%)
-console.log(stats.maxDrawdown);  // 0.12 (12% max drawdown)
+console.log(stats.roi);
+console.log(stats.maxDrawdown);
 ```
 
 ## Install
@@ -35,175 +30,65 @@ npm install @ianalloway/kelly-js
 pnpm add @ianalloway/kelly-js
 ```
 
-## API
+## API highlights
 
 ### Kelly Criterion
 
-#### `kelly(winProbability, americanOdds): KellyResult`
-
-Calculate optimal bet sizing using the Kelly Criterion.
-
 ```ts
-const k = kelly(0.60, +120);  // 60% win prob at +120
-
-k.fraction       // 0.1167  — bet 11.67% of bankroll
-k.halfKelly      // 0.0583  — recommended for most bettors
-k.quarterKelly   // 0.0292  — ultra-conservative
-k.dollars(1000)  // $116.67 — full Kelly on $1,000 bankroll
-k.halfDollars(1000) // $58.33
-k.ev             // 0.12    — expected value per unit
-k.edge           // 0.0545  — 5.45% edge over implied prob
-k.hasEdge        // true
+kelly(winProbability, americanOdds)
 ```
 
-> **Rule:** Use half-Kelly in practice. Full Kelly maximizes log-growth but variance is brutal.
+Returns Kelly sizing, half/quarter Kelly, dollar sizing, expected value, and edge.
 
-#### `kellyPortfolio(bets, maxExposure?): PortfolioResult[]`
-
-Size multiple simultaneous bets, scaling so total exposure stays within `maxExposure` (default 25%).
+### Odds conversion
 
 ```ts
-const portfolio = kellyPortfolio([
-  { winProbability: 0.58, americanOdds: -110, label: 'Chiefs ML' },
-  { winProbability: 0.62, americanOdds: +105, label: 'Warriors ATS' },
-], 0.20);
+impliedProb(american)
+toDecimal(american)
+toAmerican(decimal)
+convertOdds(american)
+removeVig(side1, side2)
 ```
 
-### Odds Conversion
+### Expected value
 
-#### `impliedProb(american): number`
 ```ts
-impliedProb(-110) // 0.5238
-impliedProb(+150) // 0.4000
+expectedValue(winProbability, americanOdds, stake?)
 ```
 
-#### `toDecimal(american): number`
+### Closing Line Value
+
 ```ts
-toDecimal(-110)   // 1.909
-toDecimal(+150)   // 2.500
+clv(openLine, closeLine)
+clvSummary(bets)
 ```
 
-#### `toAmerican(decimal): number`
+### Bankroll tracking
+
 ```ts
-toAmerican(1.909) // -110
+betPnL(stake, americanOdds, result)
+bankrollStats(bets, startingBankroll?)
 ```
 
-#### `convertOdds(american): OddsConversion`
-```ts
-convertOdds(-110)
-// { american: -110, decimal: 1.909, fractional: '10/11', impliedProbability: 0.5238 }
-```
+## Why this repo matters
 
-#### `removeVig(side1, side2): { prob1, prob2, vig }`
-```ts
-removeVig(-110, -110)
-// { prob1: 0.5, prob2: 0.5, vig: 0.0476 }
-```
+This is a compact, reusable package that turns betting math into something easy to import and test. It’s a better signal than a giant monorepo because the scope is clean and the API is obvious.
 
-### Expected Value
+## Math notes
 
-#### `expectedValue(winProbability, americanOdds, stake?)`
-```ts
-expectedValue(0.58, -110, 100)
-// { ev: 9.09, evPercent: 9.09, breakEvenProb: 0.5238 }
-```
+- Kelly formula: `f* = (bp - q) / b`
+- CLV is the gap between your line and the close
+- Full Kelly is optimal in theory; half Kelly is usually the practical default
 
-### Closing Line Value (CLV)
-
-CLV is the #1 predictor of long-term betting success. If you consistently get better odds than closing, your process is sound.
-
-#### `clv(openLine, closeLine): CLVResult`
-```ts
-clv(-108, -115)
-// { openLine: -108, closeLine: -115, clvPercent: 0.45, beatClose: true, verdict: 'positive' }
-```
-
-| Verdict | Avg CLV | Meaning |
-|---------|---------|---------|
-| `elite` | ≥ +2.0% | World-class line shopping |
-| `positive` | ≥ +0.5% | Real edge in timing/shopping |
-| `neutral` | ≥ -0.5% | No significant edge either way |
-| `negative` | < -0.5% | Consistently getting bad lines |
-
-#### `clvSummary(bets): SummaryResult`
-```ts
-clvSummary([
-  { openLine: -108, closeLine: -115 },
-  { openLine: +102, closeLine: +100 },
-  { openLine: -120, closeLine: -118 },
-]);
-// { avgCLV: 0.58, beatCloseRate: 0.67, verdict: '✅ Positive — beating the market consistently', totalBets: 3 }
-```
-
-### Bankroll Tracking
-
-#### `betPnL(stake, americanOdds, result): BetResult`
-```ts
-betPnL(100, -110, 'win')  // { pnl: 90.91, roi: 0.9091 }
-betPnL(100, -110, 'loss') // { pnl: -100, roi: -1 }
-```
-
-#### `bankrollStats(bets, startingBankroll?): BankrollStats`
-```ts
-bankrollStats(myBets, 1000)
-// {
-//   totalBets: 150, wins: 84, losses: 63, pushes: 3,
-//   winRate: 0.5714, totalStaked: 15000, netPnL: 823.50,
-//   roi: 0.0549, peakBankroll: 1901.23, maxDrawdown: 0.089,
-//   currentStreak: 4, streakType: 'win'
-// }
-```
-
-### DFS Helpers
-
-#### `ownershipLeverage(projectedPoints, ownershipPct)`
-```ts
-ownershipLeverage(52.4, 8.2)  // 5.98 — high leverage
-ownershipLeverage(58.1, 38.5) // 1.48 — chalk
-```
-
-#### `stackBonus(qbProj, receiverProj, correlation?)`
-```ts
-stackBonus(33.8, 29.8) // 1.04 — extra projected pts from correlation
-```
-
-## The Math
-
-**Kelly Formula:** `f* = (bp - q) / b`
-- `b` = net decimal odds (profit per unit)
-- `p` = your estimated win probability
-- `q` = 1 - p (loss probability)
-
-**CLV Formula:** `CLV% = (P_close - P_open) × 100`
-- Positive = you got better implied prob than close (beat the market)
-
-**EV Formula:** `EV = (b × p) - q`
-
-## Testing & Quality
-
-This library includes comprehensive Jest test coverage for all major functions:
+## Testing
 
 ```bash
 npm test
 ```
 
-Tests cover:
-- **Kelly Criterion:** Normal cases, edge cases (0 prob, 1 prob, extreme odds), dollar calculations
-- **Odds Conversion:** Bidirectional conversions, extreme odds, consistency checks
-- **Arbitrage Detection:** True arbs, no-arb scenarios, accurate stake calculations with fixed rounding
-- **Bankroll Stats:** Empty arrays (no divide-by-zero), single/multiple bets, Sharpe ratio, streaks, drawdown
-- **CLV Analysis:** Empty arrays, single/multiple bets, verdict assignment
-- **Parlay Analysis:** Multi-leg parlays, vig removal, EV detection
-- **Input Validation:** Zero-check guards in odds conversion, probability bounds enforcement
-
-### Notable Fixes
-- **Arbitrage Rounding:** Fixed critical bug where `Math.round(totalStake - stakeA * 100) / 100` was calculating incorrectly. Now properly uses `Math.round((totalStake - stakeA) * 100) / 100`.
-- **Empty Array Guards:** `bankrollStats()` and `clvSummary()` now safely handle empty bet arrays.
-- **Zero Checks:** `toDecimal()` and `toAmerican()` validate inputs and throw on invalid odds.
-
 ## Author
 
-[Ian Alloway](https://github.com/ianalloway) — Data Scientist, sports analytics & AI.
+Ian Alloway
 
 ## License
 
