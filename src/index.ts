@@ -772,3 +772,350 @@ export function lineShop(
     shoppingEdgePct,
   };
 }
+
+// ─── Market Consensus ─────────────────────────────────────────────────────────
+
+export interface MarketConsensusResult {
+  /** Consensus no-vig probability for side 1, averaged across all books */
+  prob1: number;
+  /** Consensus no-vig probability for side 2, averaged across all books */
+  prob2: number;
+  /** Fair American odds implied by consensus prob1 */
+  fairOdds1: number;
+  /** Fair American odds implied by consensus prob2 */
+  fairOdds2: number;
+  /** Number of books included in the consensus */
+  bookCount: number;
+  /**
+   * Standard deviation of per-book de-vigged prob1 across books.
+   * Low = tight market consensus. High = books disagree (softer market).
+   */
+  disagreement: number;
+  /** Per-book breakdown of de-vigged probabilities */
+  books: Array<{ book: string; deVigProb1: number; deVigProb2: number; vig: number }>;
+}
+
+export interface PoissonResult {
+  /** Win probability for side 1 (home / team A) */
+  winProb: number;
+  /** Draw / tie probability */
+  drawProb: number;
+  /** Win probability for side 2 (away / team B) */
+  lossProb: number;
+  /** P(combined total > n) — pass any real line, e.g. 2.5 */
+  overProb: (n: number) => number;
+  /** P(combined total < n) */
+  underProb: (n: number) => number;
+  /** Joint score probability matrix indexed [home_goals][away_goals] */
+  scoreMatrix: number[][];
+  /** Most likely exact score under the model */
+  modeScore: { home: number; away: number; prob: number };
+  /** Vig-free American odds for side 1 win */
+  fairOdds1: number;
+  /** Vig-free American odds for draw */
+  fairOddsDraw: number;
+  /** Vig-free American odds for side 2 win */
+  fairOdds2: number;
+}
+
+export interface GrowthRateResult {
+  /**
+   * Expected log bankroll growth per bet:
+   *   g(f) = p·ln(1 + b·f) + (1−p)·ln(1 − f)
+   * Positive = growing bankroll. Negative = overbetting (bankroll shrinks).
+   */
+  logGrowthRate: number;
+  /** Per-bet bankroll multiplier: exp(logGrowthRate) */
+  growthMultiplier: number;
+  /** Expected bankroll after n bets: startingBankroll × exp(g × n) */
+  projectedBankroll: (nBets: number, startingBankroll?: number) => number;
+  /** Full-Kelly fraction — the theoretically optimal stake */
+  optimalFraction: number;
+  /** True if current fraction exceeds full Kelly (growth rate is falling) */
+  isOverbetting: boolean;
+  /** Current fraction expressed as a multiple of full Kelly (0.5 = half-Kelly) */
+  fractionOfOptimal: number;
+}
+
+export interface DutchResult {
+  /** True if dutching guarantees a net profit (combined implied prob < 1.0) */
+  isProfit: boolean;
+  /** Guaranteed return as a % of totalStake (+ve = profit, -ve = loss) */
+  guaranteedReturnPct: number;
+  /** Optimal stake per outcome so every winner pays back the same gross amount */
+  stakes: Array<{
+    label: string;
+    stake: number;
+    odds: number;
+    /** Gross return if this outcome wins */
+    returnIfWin: number;
+  }>;
+  /** Sum of stakes across all outcomes */
+  totalStake: number;
+  /**
+   * Sum of implied probabilities across all outcomes.
+   * < 1.0 → profitable dutch. > 1.0 → book has vig (dutch loses money).
+   */
+  overround: number;
+}
+
+
+/** Internal: convert a no-vig probability to American odds */
+function probToAmerican(p: number): number {
+  if (p <= 0) return 10000;
+  if (p >= 1) return -10000;
+  if (p >= 0.5) return Math.round((-p / (1 - p)) * 100);
+  return Math.round(((1 - p) / p) * 100);
+}
+
+/**
+ * Build a consensus no-vig probability from multiple sportsbooks' two-sided lines.
+ *
+ * Each book's market is de-vigged independently, then probabilities are
+ * averaged. The result is sharper than any single book's de-vigged number
+ * because random and systematic biases across books cancel out.
+ *
+ * @example
+ * marketConsensus([
+ *   { book: 'Pinnacle',   side1Odds: -108, side2Odds: -104 },
+ *   { book: 'DraftKings', side1Odds: -112, side2Odds: +100 },
+ *   { book: 'FanDuel',    side1Odds: -110, side2Odds: -102 },
+ * ]);
+ * // → { prob1: 0.5208, prob2: 0.4792, fairOdds1: -109, fairOdds2: +109 }
+ */
+export function marketConsensus(
+  books: Array<{ book: string; side1Odds: number; side2Odds: number }>
+): MarketConsensusResult {
+  if (books.length === 0) throw new RangeError('books array must not be empty');
+
+  const bookResults = books.map((b) => {
+    const { prob1, prob2, vig } = removeVig(b.side1Odds, b.side2Odds);
+    return { book: b.book, deVigProb1: prob1, deVigProb2: prob2, vig };
+  });
+
+  const probs1 = bookResults.map((r) => r.deVigProb1);
+  const avgProb1 = probs1.reduce((s, p) => s + p, 0) / probs1.length;
+  const avgProb2 = 1 - avgProb1;
+
+  const variance = probs1.reduce((s, p) => s + Math.pow(p - avgProb1, 2), 0) / probs1.length;
+  const disagreement = Math.round(Math.sqrt(variance) * 10000) / 10000;
+
+  return {
+    prob1: Math.round(avgProb1 * 10000) / 10000,
+    prob2: Math.round(avgProb2 * 10000) / 10000,
+    fairOdds1: probToAmerican(avgProb1),
+    fairOdds2: probToAmerican(avgProb2),
+    bookCount: books.length,
+    disagreement,
+    books: bookResults,
+  };
+}
+
+// ─── Poisson Model ────────────────────────────────────────────────────────────
+
+/** Internal: Poisson probability mass function P(k; λ) */
+function poissonPMF(k: number, lambda: number): number {
+  if (lambda <= 0) return k === 0 ? 1 : 0;
+  let prob = Math.exp(-lambda);
+  for (let i = 1; i <= k; i++) prob = (prob * lambda) / i;
+  return prob;
+}
+
+/**
+ * Poisson model for match outcomes and totals betting.
+ *
+ * Models goals/runs/points for each side as independent Poisson random variables
+ * with means lambda1 and lambda2. Returns win/draw/loss probabilities, over/under
+ * functions for any line, the full score probability matrix, and fair odds.
+ *
+ * Inputs: season-average goals (or runs, points) per game per team.
+ *
+ * @param lambda1  Expected score for side 1 (home/team A), e.g. 1.6 goals
+ * @param lambda2  Expected score for side 2 (away/team B), e.g. 1.1 goals
+ * @param maxGoals Max goals per side to model (default 10 — tail probability < 0.01%)
+ *
+ * @example
+ * const m = poissonModel(1.6, 1.1);
+ * m.winProb           // 0.5001
+ * m.overProb(2.5)     // 0.4638  (need ≥ 3 goals combined)
+ * m.modeScore         // { home: 1, away: 0, prob: 0.1742 }
+ * m.fairOdds1         // -200  (side 1 is a heavy favourite)
+ */
+export function poissonModel(
+  lambda1: number,
+  lambda2: number,
+  maxGoals = 10
+): PoissonResult {
+  if (lambda1 <= 0 || lambda2 <= 0) {
+    throw new RangeError('lambda values must be positive');
+  }
+
+  const pmf1 = Array.from({ length: maxGoals + 1 }, (_, k) => poissonPMF(k, lambda1));
+  const pmf2 = Array.from({ length: maxGoals + 1 }, (_, k) => poissonPMF(k, lambda2));
+
+  const scoreMatrix: number[][] = Array.from({ length: maxGoals + 1 }, (_, i) =>
+    Array.from({ length: maxGoals + 1 }, (_, j) => pmf1[i] * pmf2[j])
+  );
+
+  let winProb = 0, drawProb = 0, lossProb = 0;
+  let modeProb = 0, modeHome = 0, modeAway = 0;
+
+  for (let i = 0; i <= maxGoals; i++) {
+    for (let j = 0; j <= maxGoals; j++) {
+      const p = scoreMatrix[i][j];
+      if (i > j) winProb += p;
+      else if (i === j) drawProb += p;
+      else lossProb += p;
+      if (p > modeProb) { modeProb = p; modeHome = i; modeAway = j; }
+    }
+  }
+
+  const round4 = (n: number) => Math.round(n * 10000) / 10000;
+
+  return {
+    winProb: round4(winProb),
+    drawProb: round4(drawProb),
+    lossProb: round4(lossProb),
+    overProb: (n: number) => {
+      let p = 0;
+      for (let i = 0; i <= maxGoals; i++)
+        for (let j = 0; j <= maxGoals; j++)
+          if (i + j > n) p += scoreMatrix[i][j];
+      return round4(p);
+    },
+    underProb: (n: number) => {
+      let p = 0;
+      for (let i = 0; i <= maxGoals; i++)
+        for (let j = 0; j <= maxGoals; j++)
+          if (i + j < n) p += scoreMatrix[i][j];
+      return round4(p);
+    },
+    scoreMatrix,
+    modeScore: { home: modeHome, away: modeAway, prob: round4(modeProb) },
+    fairOdds1: probToAmerican(winProb),
+    fairOddsDraw: probToAmerican(drawProb),
+    fairOdds2: probToAmerican(lossProb),
+  };
+}
+
+// ─── Kelly Growth Rate ────────────────────────────────────────────────────────
+
+/**
+ * Calculate the theoretical per-bet log bankroll growth rate for a given Kelly fraction.
+ *
+ * The formula g(f) = p·ln(1+b·f) + (1−p)·ln(1−f) is the expected log-growth
+ * per bet. It peaks at full Kelly (f*) and decreases on either side — bets
+ * above 2×f* produce negative expected log growth, meaning the bankroll shrinks.
+ *
+ * Use this to compare strategies: zero, quarter-Kelly, half-Kelly, full Kelly.
+ *
+ * @param winProbability True win probability (0–1)
+ * @param americanOdds   Offered odds
+ * @param fraction       Fraction of bankroll to stake per bet (0 to <1)
+ *
+ * @example
+ * kellyGrowthRate(0.55, -110, 0.059)   // half-Kelly
+ * // → { logGrowthRate: 0.00248, growthMultiplier: 1.00248, isOverbetting: false }
+ * kellyGrowthRate(0.55, -110, 0.118)   // full Kelly (maximum)
+ * // → { logGrowthRate: 0.00249, isOverbetting: false }
+ * kellyGrowthRate(0.55, -110, 0.25)    // overbetting
+ * // → { logGrowthRate: -0.003, isOverbetting: true }
+ */
+export function kellyGrowthRate(
+  winProbability: number,
+  americanOdds: number,
+  fraction: number
+): GrowthRateResult {
+  if (winProbability <= 0 || winProbability >= 1) {
+    throw new RangeError('winProbability must be between 0 and 1 exclusive');
+  }
+  if (!Number.isFinite(americanOdds) || americanOdds === 0) {
+    throw new RangeError('americanOdds must be a finite non-zero number');
+  }
+  if (fraction < 0 || fraction >= 1) {
+    throw new RangeError('fraction must be in [0, 1)');
+  }
+
+  const b = toDecimal(americanOdds) - 1;
+  const p = winProbability;
+  const q = 1 - p;
+
+  const g = fraction === 0
+    ? 0
+    : p * Math.log(1 + b * fraction) + q * Math.log(1 - fraction);
+
+  const optimalFraction = Math.max(0, Math.round(((b * p - q) / b) * 10000) / 10000);
+
+  return {
+    logGrowthRate: Math.round(g * 1e8) / 1e8,
+    growthMultiplier: Math.round(Math.exp(g) * 1e8) / 1e8,
+    projectedBankroll: (nBets: number, startingBankroll = 1000) => {
+      if (!Number.isFinite(nBets) || nBets < 0) {
+        throw new RangeError('nBets must be a non-negative number');
+      }
+      return Math.round(startingBankroll * Math.exp(g * nBets) * 100) / 100;
+    },
+    optimalFraction,
+    isOverbetting: fraction > optimalFraction && optimalFraction > 0,
+    fractionOfOptimal: optimalFraction > 0
+      ? Math.round((fraction / optimalFraction) * 10000) / 10000
+      : 0,
+  };
+}
+
+// ─── Dutching ─────────────────────────────────────────────────────────────────
+
+/**
+ * Calculate Dutch betting stakes — spread a total stake across N outcomes so
+ * every winner pays back the same gross amount.
+ *
+ * Profitable when the combined implied probability across all outcomes < 1.0
+ * (a multi-outcome arb). Common in horse racing and markets with many runners
+ * when using best-available odds from multiple books.
+ *
+ * @param outcomes   `{ label, americanOdds }` per outcome — use best line per outcome
+ * @param totalStake Budget to spread across all outcomes (default 1000)
+ *
+ * @example
+ * dutching([
+ *   { label: 'Horse A', americanOdds: +200 },
+ *   { label: 'Horse B', americanOdds: +350 },
+ *   { label: 'Horse C', americanOdds: +500 },
+ * ], 1000);
+ * // → { isProfit: true, guaranteedReturnPct: 12.5, stakes: [...] }
+ */
+export function dutching(
+  outcomes: Array<{ label: string; americanOdds: number }>,
+  totalStake = 1000
+): DutchResult {
+  if (outcomes.length === 0) throw new RangeError('outcomes array must not be empty');
+  if (!Number.isFinite(totalStake) || totalStake <= 0) {
+    throw new RangeError('totalStake must be a positive finite number');
+  }
+
+  const decimals = outcomes.map((o) => toDecimal(o.americanOdds));
+  // overround = sum(1 / decimal_i) = sum of implied probabilities
+  const overround = decimals.reduce((s, d) => s + 1 / d, 0);
+
+  // Guaranteed gross return = totalStake / overround
+  const guaranteedReturn = totalStake / overround;
+  const guaranteedReturnPct = Math.round(((guaranteedReturn / totalStake) - 1) * 10000) / 100;
+
+  const stakes = outcomes.map((o, i) => {
+    const stake = Math.round((guaranteedReturn / decimals[i]) * 100) / 100;
+    return {
+      label: o.label,
+      stake,
+      odds: o.americanOdds,
+      returnIfWin: Math.round(stake * decimals[i] * 100) / 100,
+    };
+  });
+
+  return {
+    isProfit: overround < 1.0,
+    guaranteedReturnPct,
+    stakes,
+    totalStake,
+    overround: Math.round(overround * 10000) / 10000,
+  };
+}
