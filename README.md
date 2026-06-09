@@ -70,6 +70,59 @@ betPnL(stake, americanOdds, result)
 bankrollStats(bets, startingBankroll?)
 ```
 
+### Monte Carlo growth simulation
+
+```ts
+simulateGrowth(winProbability, americanOdds, betsPerPath?, paths?, startingBankroll?, kellyMultiplier?, seed?)
+```
+
+Simulates many independent bankroll paths, each placing sequential fractional-Kelly
+bets, and reports the distribution of outcomes — because a positive edge tells you
+nothing about variance.
+
+```ts
+const sim = simulateGrowth(0.55, -110, 500, 2000, 1000, 0.5, 42);
+
+sim.medianFinal       // 1675.81 — median final bankroll across 2000 paths
+sim.p10               // 802.69  — 10% of paths ended at or below this
+sim.p90               // 3498.68 — 10% of paths ended at or above this
+sim.ruinRate          // 0       — fraction of paths that dropped below 10% of start
+sim.medianMaxDrawdown // 0.3891  — median worst peak-to-trough drawdown (39%)
+```
+
+Reading the percentiles: `p10`/`p90` bracket the realistic range of outcomes.
+In the example above, a genuine 55% edge at -110 with half-Kelly sizing still
+loses money in over 10% of 500-bet runs and a typical run suffers a ~39% drawdown —
+useful context before sizing up. Pass an integer `seed` for reproducible results
+(seeded mulberry32 PRNG); omit it for a random run.
+
+### Line shopping
+
+```ts
+lineShop(books)
+```
+
+Ranks American odds across sportsbooks for one side of a bet and quantifies how
+much implied probability you save by taking the best line instead of the worst.
+
+```ts
+lineShop([
+  { book: 'DraftKings', odds: -112 },
+  { book: 'FanDuel',    odds: -108 },
+  { book: 'BetMGM',     odds: -115 },
+]);
+// {
+//   bestBook: 'FanDuel',
+//   bestOdds: -108,
+//   impliedProbAtBest: 0.5192,
+//   shoppingEdgePct: 1.57,   // percentage points of implied prob saved vs. worst book
+//   ranked: [...]            // all books sorted best-to-worst for the bettor
+// }
+```
+
+A 1.57-point shopping edge is often the difference between a losing and a
+break-even bettor — line shopping is the cheapest edge available.
+
 ## Why this repo matters
 
 This is a compact, reusable package that turns betting math into something easy to import and test. It’s a better signal than a giant monorepo because the scope is clean and the API is obvious.
