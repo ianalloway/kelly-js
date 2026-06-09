@@ -15,6 +15,8 @@ import {
   expectedValue,
   ownershipLeverage,
   stackBonus,
+  simulateGrowth,
+  lineShop,
 } from './index';
 
 describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
@@ -700,6 +702,130 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
         const back = toDecimal(american);
         expect(back).toBeCloseTo(d, 2);
       });
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // simulateGrowth() — Monte Carlo bankroll simulation
+  // ────────────────────────────────────────────────────────────────────────────
+
+  describe('simulateGrowth()', () => {
+    it('returns valid SimulationResult shape', () => {
+      const result = simulateGrowth(0.55, -110, 200, 500, 1000, 0.5, 42);
+      expect(result.paths).toBe(500);
+      expect(result.betsPerPath).toBe(200);
+      expect(result.startingBankroll).toBe(1000);
+      expect(typeof result.medianFinal).toBe('number');
+      expect(typeof result.ruinRate).toBe('number');
+      expect(typeof result.medianMaxDrawdown).toBe('number');
+    });
+
+    it('percentiles are ordered p10 ≤ p25 ≤ median ≤ p75 ≤ p90', () => {
+      const r = simulateGrowth(0.55, -110, 300, 1000, 1000, 0.5, 7);
+      expect(r.p10).toBeLessThanOrEqual(r.p25);
+      expect(r.p25).toBeLessThanOrEqual(r.medianFinal);
+      expect(r.medianFinal).toBeLessThanOrEqual(r.p75);
+      expect(r.p75).toBeLessThanOrEqual(r.p90);
+    });
+
+    it('ruin rate is between 0 and 1', () => {
+      const r = simulateGrowth(0.55, -110, 200, 500, 1000, 0.5, 99);
+      expect(r.ruinRate).toBeGreaterThanOrEqual(0);
+      expect(r.ruinRate).toBeLessThanOrEqual(1);
+    });
+
+    it('positive-edge bet grows median bankroll over 500 bets (half-Kelly)', () => {
+      // 55% win at -110 is a strong edge; median should grow with half-Kelly
+      const r = simulateGrowth(0.55, -110, 500, 2000, 1000, 0.5, 123);
+      expect(r.medianFinal).toBeGreaterThan(1000);
+    });
+
+    it('zero-edge bet (break-even) does not grow', () => {
+      // Implied prob of -110 is ~52.38%; betting at exactly that prob is zero EV
+      const r = simulateGrowth(0.5238, -110, 500, 1000, 1000, 0.5, 5);
+      // Kelly fraction ≈ 0 at break-even, so bankroll stays flat
+      expect(r.medianFinal).toBeCloseTo(1000, -1);
+    });
+
+    it('is reproducible with same seed', () => {
+      const a = simulateGrowth(0.56, -110, 300, 500, 1000, 0.5, 42);
+      const b = simulateGrowth(0.56, -110, 300, 500, 1000, 0.5, 42);
+      expect(a.medianFinal).toBe(b.medianFinal);
+      expect(a.ruinRate).toBe(b.ruinRate);
+    });
+
+    it('throws on invalid winProbability', () => {
+      expect(() => simulateGrowth(0, -110)).toThrow(RangeError);
+      expect(() => simulateGrowth(1, -110)).toThrow(RangeError);
+      expect(() => simulateGrowth(1.5, -110)).toThrow(RangeError);
+    });
+
+    it('throws on invalid americanOdds', () => {
+      expect(() => simulateGrowth(0.55, 0)).toThrow(RangeError);
+      expect(() => simulateGrowth(0.55, Infinity)).toThrow(RangeError);
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // lineShop() — best odds across sportsbooks
+  // ────────────────────────────────────────────────────────────────────────────
+
+  describe('lineShop()', () => {
+    it('identifies the best book among negative lines', () => {
+      const result = lineShop([
+        { book: 'DraftKings', odds: -112 },
+        { book: 'FanDuel',    odds: -108 },
+        { book: 'BetMGM',     odds: -115 },
+      ]);
+      expect(result.bestBook).toBe('FanDuel');
+      expect(result.bestOdds).toBe(-108);
+    });
+
+    it('identifies the best book among positive lines', () => {
+      const result = lineShop([
+        { book: 'DraftKings', odds: +130 },
+        { book: 'FanDuel',    odds: +135 },
+        { book: 'PointsBet',  odds: +128 },
+      ]);
+      expect(result.bestBook).toBe('FanDuel');
+      expect(result.bestOdds).toBe(135);
+    });
+
+    it('ranked array is sorted best-to-worst', () => {
+      const result = lineShop([
+        { book: 'A', odds: -115 },
+        { book: 'B', odds: -108 },
+        { book: 'C', odds: -120 },
+      ]);
+      expect(result.ranked[0].book).toBe('B');
+      expect(result.ranked[result.ranked.length - 1].book).toBe('C');
+    });
+
+    it('shoppingEdgePct is non-negative and reasonable', () => {
+      const result = lineShop([
+        { book: 'X', odds: -108 },
+        { book: 'Y', odds: -115 },
+      ]);
+      expect(result.shoppingEdgePct).toBeGreaterThanOrEqual(0);
+      expect(result.shoppingEdgePct).toBeLessThan(10); // sanity cap
+    });
+
+    it('returns zero shopping edge when all books are the same', () => {
+      const result = lineShop([
+        { book: 'A', odds: -110 },
+        { book: 'B', odds: -110 },
+      ]);
+      expect(result.shoppingEdgePct).toBe(0);
+    });
+
+    it('handles a single book without error', () => {
+      const result = lineShop([{ book: 'Solo', odds: +200 }]);
+      expect(result.bestBook).toBe('Solo');
+      expect(result.shoppingEdgePct).toBe(0);
+    });
+
+    it('throws on empty books array', () => {
+      expect(() => lineShop([])).toThrow(RangeError);
     });
   });
 });
