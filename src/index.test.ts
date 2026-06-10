@@ -17,6 +17,10 @@ import {
   stackBonus,
   simulateGrowth,
   lineShop,
+  marketConsensus,
+  poissonModel,
+  kellyGrowthRate,
+  dutching,
 } from './index';
 
 describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
@@ -826,6 +830,243 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
 
     it('throws on empty books array', () => {
       expect(() => lineShop([])).toThrow(RangeError);
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // marketConsensus() — multi-book no-vig consensus probability
+  // ────────────────────────────────────────────────────────────────────────────
+
+  describe('marketConsensus()', () => {
+    const books = [
+      { book: 'Pinnacle',   side1Odds: -108, side2Odds: -104 },
+      { book: 'DraftKings', side1Odds: -112, side2Odds: +100 },
+      { book: 'FanDuel',    side1Odds: -110, side2Odds: -102 },
+    ];
+
+    it('returns correct bookCount', () => {
+      expect(marketConsensus(books).bookCount).toBe(3);
+    });
+
+    it('prob1 + prob2 === 1', () => {
+      const r = marketConsensus(books);
+      expect(r.prob1 + r.prob2).toBeCloseTo(1, 4);
+    });
+
+    it('prob1 > 0.5 when side1 is clearly favoured', () => {
+      const r = marketConsensus([
+        { book: 'A', side1Odds: -200, side2Odds: +170 },
+        { book: 'B', side1Odds: -195, side2Odds: +165 },
+      ]);
+      expect(r.prob1).toBeGreaterThan(0.5);
+    });
+
+    it('fairOdds1 and fairOdds2 are opposite in sign for close markets', () => {
+      const r = marketConsensus([{ book: 'X', side1Odds: -110, side2Odds: -110 }]);
+      // 50/50 market → both sides should be around +/-100
+      expect(Math.sign(r.fairOdds1)).toBe(-1);
+      expect(Math.sign(r.fairOdds2)).toBe(-1);
+    });
+
+    it('disagreement is 0 when all books show identical de-vigged probs', () => {
+      const same = [
+        { book: 'A', side1Odds: -110, side2Odds: -110 },
+        { book: 'B', side1Odds: -110, side2Odds: -110 },
+        { book: 'C', side1Odds: -110, side2Odds: -110 },
+      ];
+      expect(marketConsensus(same).disagreement).toBe(0);
+    });
+
+    it('disagreement is non-zero when books differ', () => {
+      expect(marketConsensus(books).disagreement).toBeGreaterThan(0);
+    });
+
+    it('per-book breakdown has correct length', () => {
+      expect(marketConsensus(books).books).toHaveLength(3);
+    });
+
+    it('throws on empty books array', () => {
+      expect(() => marketConsensus([])).toThrow(RangeError);
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // poissonModel() — Poisson match outcome and totals model
+  // ────────────────────────────────────────────────────────────────────────────
+
+  describe('poissonModel()', () => {
+    it('win + draw + loss probabilities sum to ~1', () => {
+      const m = poissonModel(1.6, 1.1);
+      expect(m.winProb + m.drawProb + m.lossProb).toBeCloseTo(1, 3);
+    });
+
+    it('favoured side (higher lambda) has higher winProb', () => {
+      const m = poissonModel(2.0, 0.8);
+      expect(m.winProb).toBeGreaterThan(m.lossProb);
+    });
+
+    it('equal lambdas → winProb ≈ lossProb', () => {
+      const m = poissonModel(1.5, 1.5);
+      expect(m.winProb).toBeCloseTo(m.lossProb, 2);
+    });
+
+    it('overProb(2.5) + underProb(2.5) ≈ 1 (no push on half-goal line)', () => {
+      const m = poissonModel(1.6, 1.1);
+      expect(m.overProb(2.5) + m.underProb(2.5)).toBeCloseTo(1, 3);
+    });
+
+    it('overProb decreases as the line increases', () => {
+      const m = poissonModel(1.6, 1.1);
+      expect(m.overProb(1.5)).toBeGreaterThan(m.overProb(2.5));
+      expect(m.overProb(2.5)).toBeGreaterThan(m.overProb(4.5));
+    });
+
+    it('modeScore is the highest-probability cell in the matrix', () => {
+      const m = poissonModel(1.6, 1.1);
+      const { home, away, prob } = m.modeScore;
+      // modeScore.prob is rounded to 4dp; raw matrix entry is unrounded
+      expect(prob).toBeCloseTo(m.scoreMatrix[home][away], 4);
+      // Verify no other cell exceeds the mode cell
+      const maxCell = Math.max(...m.scoreMatrix.flat());
+      expect(m.scoreMatrix[home][away]).toBeCloseTo(maxCell, 6);
+    });
+
+    it('fairOdds1 reflects heavy favourite correctly', () => {
+      const m = poissonModel(3.0, 0.5);
+      // Side 1 wins ~90%+ → fairOdds1 should be very negative (large favourite)
+      expect(m.fairOdds1).toBeLessThan(-300);
+    });
+
+    it('scoreMatrix dimensions are (maxGoals+1) × (maxGoals+1)', () => {
+      const m = poissonModel(1.5, 1.2, 6);
+      expect(m.scoreMatrix.length).toBe(7);
+      expect(m.scoreMatrix[0].length).toBe(7);
+    });
+
+    it('throws on non-positive lambda', () => {
+      expect(() => poissonModel(0, 1.5)).toThrow(RangeError);
+      expect(() => poissonModel(1.5, -1)).toThrow(RangeError);
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // kellyGrowthRate() — theoretical log bankroll growth per bet
+  // ────────────────────────────────────────────────────────────────────────────
+
+  describe('kellyGrowthRate()', () => {
+    it('returns 0 log growth at fraction=0 (no bet)', () => {
+      expect(kellyGrowthRate(0.55, -110, 0).logGrowthRate).toBe(0);
+    });
+
+    it('positive-edge bet at full Kelly has positive log growth', () => {
+      const fullK = kelly(0.55, -110).fraction;
+      expect(kellyGrowthRate(0.55, -110, fullK).logGrowthRate).toBeGreaterThan(0);
+    });
+
+    it('full Kelly has higher log growth than half Kelly for edge bet', () => {
+      const fullK = kelly(0.55, -110).fraction;
+      const gFull = kellyGrowthRate(0.55, -110, fullK).logGrowthRate;
+      const gHalf = kellyGrowthRate(0.55, -110, fullK / 2).logGrowthRate;
+      expect(gFull).toBeGreaterThan(gHalf);
+    });
+
+    it('overbetting 2x Kelly produces lower growth than full Kelly', () => {
+      const fullK = kelly(0.55, -110).fraction;
+      const gFull = kellyGrowthRate(0.55, -110, fullK).logGrowthRate;
+      const twoX = Math.min(fullK * 2, 0.99);
+      const gOver = kellyGrowthRate(0.55, -110, twoX).logGrowthRate;
+      expect(gFull).toBeGreaterThan(gOver);
+    });
+
+    it('isOverbetting is false at half Kelly', () => {
+      const fullK = kelly(0.55, -110).fraction;
+      expect(kellyGrowthRate(0.55, -110, fullK / 2).isOverbetting).toBe(false);
+    });
+
+    it('isOverbetting is true beyond full Kelly', () => {
+      const fullK = kelly(0.55, -110).fraction;
+      const over = Math.min(fullK * 1.5, 0.99);
+      expect(kellyGrowthRate(0.55, -110, over).isOverbetting).toBe(true);
+    });
+
+    it('projectedBankroll grows correctly over N bets', () => {
+      const fullK = kelly(0.55, -110).fraction;
+      const gr = kellyGrowthRate(0.55, -110, fullK);
+      const projected = gr.projectedBankroll(100, 1000);
+      const expected = Math.round(1000 * Math.exp(gr.logGrowthRate * 100) * 100) / 100;
+      expect(projected).toBe(expected);
+    });
+
+    it('growthMultiplier equals exp(logGrowthRate)', () => {
+      const gr = kellyGrowthRate(0.55, -110, 0.05);
+      expect(gr.growthMultiplier).toBeCloseTo(Math.exp(gr.logGrowthRate), 5);
+    });
+
+    it('throws on invalid inputs', () => {
+      expect(() => kellyGrowthRate(0, -110, 0.1)).toThrow(RangeError);
+      expect(() => kellyGrowthRate(0.55, 0, 0.1)).toThrow(RangeError);
+      expect(() => kellyGrowthRate(0.55, -110, -0.1)).toThrow(RangeError);
+      expect(() => kellyGrowthRate(0.55, -110, 1)).toThrow(RangeError);
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // dutching() — equal-profit staking across multiple outcomes
+  // ────────────────────────────────────────────────────────────────────────────
+
+  describe('dutching()', () => {
+    const horseRace = [
+      { label: 'Horse A', americanOdds: +200 },
+      { label: 'Horse B', americanOdds: +350 },
+      { label: 'Horse C', americanOdds: +500 },
+    ];
+
+    it('all outcomes return the same gross amount (within rounding)', () => {
+      const r = dutching(horseRace, 1000);
+      const returns = r.stakes.map((s) => s.returnIfWin);
+      const maxDiff = Math.max(...returns) - Math.min(...returns);
+      expect(maxDiff).toBeLessThanOrEqual(0.02); // rounding tolerance
+    });
+
+    it('stakes sum close to totalStake', () => {
+      const r = dutching(horseRace, 1000);
+      const sum = r.stakes.reduce((s, o) => s + o.stake, 0);
+      expect(sum).toBeCloseTo(1000, 0);
+    });
+
+    it('isProfit true when combined implied prob < 1', () => {
+      // +200, +350, +500 → implied probs 0.333 + 0.222 + 0.167 = 0.722 < 1
+      expect(dutching(horseRace).isProfit).toBe(true);
+    });
+
+    it('isProfit false for standard two-sided market with vig', () => {
+      const result = dutching([
+        { label: 'Team A', americanOdds: -110 },
+        { label: 'Team B', americanOdds: -110 },
+      ]);
+      expect(result.isProfit).toBe(false);
+    });
+
+    it('overround matches sum of implied probabilities', () => {
+      const r = dutching(horseRace);
+      const impliedSum = horseRace
+        .map((o) => 1 / toDecimal(o.americanOdds))
+        .reduce((s, p) => s + p, 0);
+      expect(r.overround).toBeCloseTo(impliedSum, 4);
+    });
+
+    it('single outcome: entire stake on one runner', () => {
+      const r = dutching([{ label: 'Only Horse', americanOdds: +300 }], 100);
+      expect(r.stakes[0].stake).toBeCloseTo(100, 1);
+    });
+
+    it('throws on empty outcomes', () => {
+      expect(() => dutching([])).toThrow(RangeError);
+    });
+
+    it('throws on non-positive totalStake', () => {
+      expect(() => dutching(horseRace, 0)).toThrow(RangeError);
+      expect(() => dutching(horseRace, -100)).toThrow(RangeError);
     });
   });
 });
