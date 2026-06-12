@@ -14,7 +14,7 @@
   "scripts": {
     "build": "tsc",
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit && tsc -p tsconfig.test.json"
   },
   "keywords": ["kelly", "criterion", "sports-betting", "bankroll", "clv", "expected-value", "gambling"],
   "author": "Ian Alloway <ian@allowayllc.com>",
