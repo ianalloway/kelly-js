@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main, 'claude/**']
+    tags: ['v*']
   pull_request:
     branches: [main]
 
@@ -20,8 +21,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Type check
-        run: npx tsc --noEmit
+      - name: Type check (src + tests)
+        run: npm run lint
 
       - name: Test
         run: npm test
@@ -33,7 +34,7 @@ jobs:
         run: node -e "const k = require('./dist/index.js'); console.log('kelly(-110, 0.58):', k.kelly(0.58, -110).fraction); console.log('clv:', k.clv(-108, -115).verdict);"
 
   publish:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: build-and-test
     runs-on: ubuntu-latest
     steps:
