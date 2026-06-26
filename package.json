@@ -14,11 +14,20 @@
   "scripts": {
     "build": "tsc",
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
-    "lint": "tsc --noEmit && tsc -p tsconfig.test.json"
+    "lint": "tsc --noEmit && tsc -p tsconfig.test.json",
+    "prepublishOnly": "npm run lint && npm run test && npm run build"
   },
   "keywords": ["kelly", "criterion", "sports-betting", "bankroll", "clv", "expected-value", "gambling"],
   "author": "Ian Alloway <ian@allowayllc.com>",
   "license": "MIT",
+  "homepage": "https://github.com/ianalloway/kelly-js#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ianalloway/kelly-js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ianalloway/kelly-js/issues"
+  },
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "jest": "^30.4.2",
