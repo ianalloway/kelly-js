@@ -325,6 +325,47 @@ export function optimalFractionalKelly(
   return Math.max(0, Math.min(1, multiplier));
 }
 
+/**
+ * Kelly sizing for a parlay (accumulator), treating all legs as a single bet.
+ *
+ * Combines each leg's true win probability and American odds into one
+ * effective bet, then runs the standard Kelly formula against that combined
+ * probability and combined odds. Legs are assumed independent.
+ *
+ * @param legs Array of `{ probability, americanOdds }` — your true win
+ *             probability and the offered odds for each leg
+ *
+ * @example
+ * kellyParlay([
+ *   { probability: 0.55, americanOdds: -110 },
+ *   { probability: 0.60, americanOdds: -120 },
+ * ]);
+ * // → { fraction: ..., combinedOdds: ..., trueWinProb: 0.33, ... }
+ */
+export function kellyParlay(
+  legs: Array<{ probability: number; americanOdds: number }>
+): KellyResult & { combinedOdds: number; combinedDecimal: number; trueWinProb: number } {
+  if (legs.length === 0) throw new RangeError('legs array must not be empty');
+  legs.forEach((leg) => {
+    if (leg.probability <= 0 || leg.probability >= 1) {
+      throw new RangeError('probability must be between 0 and 1 exclusive for every leg');
+    }
+  });
+
+  const combinedDecimal = legs.reduce((acc, leg) => acc * toDecimal(leg.americanOdds), 1);
+  const trueWinProb = legs.reduce((acc, leg) => acc * leg.probability, 1);
+  const combinedOdds = toAmerican(combinedDecimal);
+
+  const base = kelly(trueWinProb, combinedOdds);
+
+  return {
+    ...base,
+    combinedOdds,
+    combinedDecimal: Math.round(combinedDecimal * 1000) / 1000,
+    trueWinProb: Math.round(trueWinProb * 10000) / 10000,
+  };
+}
+
 // ─── Expected Value ───────────────────────────────────────────────────────────
 
 /**
