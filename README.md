@@ -40,6 +40,21 @@ kelly(winProbability, americanOdds)
 
 Returns Kelly sizing, half/quarter Kelly, dollar sizing, expected value, and edge.
 
+```ts
+kellyParlay(legs)
+```
+
+Sizes a multi-leg parlay as one combined bet — multiplies leg probabilities and
+odds together, then runs the same Kelly formula against the result.
+
+```ts
+kellyParlay([
+  { probability: 0.55, americanOdds: -110 },
+  { probability: 0.60, americanOdds: -120 },
+]);
+// { fraction: ..., combinedOdds: ..., combinedDecimal: ..., trueWinProb: 0.33, ... }
+```
+
 ### Odds conversion
 
 ```ts

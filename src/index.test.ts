@@ -21,6 +21,7 @@ import {
   poissonModel,
   kellyGrowthRate,
   dutching,
+  kellyParlay,
 } from './index';
 
 describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
@@ -89,6 +90,49 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
       // EV = (1.0 * 0.6) - 0.4 = 0.2
       const result = kelly(0.6, 100); // +100 = 2.0 decimal
       expect(result.ev).toBeCloseTo(0.2, 2);
+    });
+  });
+
+  describe('kellyParlay()', () => {
+    it('combines leg probabilities and odds into one Kelly bet', () => {
+      const result = kellyParlay([
+        { probability: 0.55, americanOdds: -110 },
+        { probability: 0.6, americanOdds: -120 },
+      ]);
+      expect(result.trueWinProb).toBeCloseTo(0.55 * 0.6, 4);
+      expect(result.combinedDecimal).toBeCloseTo(toDecimal(-110) * toDecimal(-120), 2);
+      expect(result.fraction).toBeGreaterThanOrEqual(0);
+      expect(typeof result.combinedOdds).toBe('number');
+    });
+
+    it('matches single-leg kelly() for a one-leg parlay', () => {
+      const single = kelly(0.58, -110);
+      const parlay = kellyParlay([{ probability: 0.58, americanOdds: -110 }]);
+      expect(parlay.fraction).toBe(single.fraction);
+      expect(parlay.trueWinProb).toBe(0.58);
+    });
+
+    it('returns zero fraction when the combined parlay has no edge', () => {
+      // Both legs priced at exactly their implied probability — no edge anywhere
+      const result = kellyParlay([
+        { probability: 0.5238, americanOdds: -110 },
+        { probability: 0.5238, americanOdds: -110 },
+      ]);
+      expect(result.fraction).toBe(0);
+      expect(result.hasEdge).toBe(false);
+    });
+
+    it('throws on an empty legs array', () => {
+      expect(() => kellyParlay([])).toThrow(RangeError);
+    });
+
+    it('throws when any leg probability is out of range', () => {
+      expect(() =>
+        kellyParlay([{ probability: 1, americanOdds: -110 }])
+      ).toThrow(RangeError);
+      expect(() =>
+        kellyParlay([{ probability: 0, americanOdds: -110 }])
+      ).toThrow(RangeError);
     });
   });
 
