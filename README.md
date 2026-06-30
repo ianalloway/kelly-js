@@ -151,7 +151,9 @@ This is a compact, reusable package that turns betting math into something easy 
 ## Testing
 
 ```bash
-npm test
+npm run lint       # Type-check source and tests
+npm test           # Run Jest tests
+npm run test:dist  # Rebuild dist/ and verify published exports
 ```
 
 ## Author
