@@ -138,6 +138,25 @@ lineShop([
 A 1.57-point shopping edge is often the difference between a losing and a
 break-even bettor — line shopping is the cheapest edge available.
 
+### Advanced / extras
+
+These cover more specialized use cases (portfolio sizing, arbitrage/dutching,
+DFS, and a Poisson totals model). All are exported from the same package —
+nothing here needs a separate install.
+
+```ts
+kellyPortfolio(bets, maxExposure?)      // size several simultaneous Kelly bets under one exposure cap
+optimalFractionalKelly(edge, variance, maxDrawdown, riskOfDrawdown?)
+kellyGrowthRate(winProbability, americanOdds, fraction) // compare growth rate at any staking fraction
+parlayAnalysis(legs)                    // true EV/win prob for a multi-leg parlay
+arbitrage(oddsA, oddsB, totalStake?)    // guaranteed-profit stake split across two books
+dutching(outcomes, totalStake?)         // guaranteed-profit stake split across 3+ outcomes
+marketConsensus(books)                  // de-vig and average odds across books
+poissonModel(lambda1, lambda2, maxGoals?) // win/draw/loss + totals model for scoring sports
+ownershipLeverage(projectedPoints, ownershipPct) // DFS contrarian-play score
+stackBonus(qbProj, receiverProj, correlation?)   // DFS game-stack correlation bonus
+```
+
 ## Why this repo matters
 
 This is a compact, reusable package that turns betting math into something easy to import and test. It’s a better signal than a giant monorepo because the scope is clean and the API is obvious.
