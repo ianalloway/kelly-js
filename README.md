@@ -2,7 +2,6 @@
 
 **The sports bettor's math toolkit.** Kelly Criterion, CLV, EV, bankroll stats, odds conversion — TypeScript, zero dependencies, tree-shakeable.
 
-[![npm](https://img.shields.io/npm/v/@ianalloway/kelly-js?style=for-the-badge)](https://www.npmjs.com/package/@ianalloway/kelly-js)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
 [![Tests](https://img.shields.io/badge/Tests-Jest-success?style=for-the-badge)](jest.config.js)
@@ -25,7 +24,7 @@ console.log(stats.maxDrawdown);
 ## Install
 
 ```bash
-npm install @ianalloway/kelly-js
+npm install github:ianalloway/kelly-js  # npm publish pending
 # or
 pnpm add @ianalloway/kelly-js
 ```
