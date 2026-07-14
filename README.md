@@ -24,7 +24,7 @@ console.log(stats.maxDrawdown);
 ## Install
 
 ```bash
-npm install github:ianalloway/kelly-js  # npm publish pending
+npm install @ianalloway/kelly-js
 # or
 pnpm add @ianalloway/kelly-js
 ```
