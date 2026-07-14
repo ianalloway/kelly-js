@@ -22,6 +22,7 @@ import {
   kellyGrowthRate,
   dutching,
   kellyParlay,
+  hedgeBet,
 } from './index';
 
 describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
@@ -1111,6 +1112,54 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
     it('throws on non-positive totalStake', () => {
       expect(() => dutching(horseRace, 0)).toThrow(RangeError);
       expect(() => dutching(horseRace, -100)).toThrow(RangeError);
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Hedge Bet Tests
+  // ────────────────────────────────────────────────────────────────────────────
+
+  describe('hedgeBet()', () => {
+    it('locks in guaranteed profit when original odds were long', () => {
+      // Bet $100 at +300 early; opposite now available at +100
+      const result = hedgeBet(100, 300, 100);
+      expect(result.hedgeStake).toBe(200);          // 100 * 4.0 / 2.0
+      expect(result.grossReturn).toBe(400);          // 100 * 4.0
+      expect(result.totalRisked).toBe(300);
+      expect(result.guaranteedProfit).toBe(100);
+      expect(result.isProfit).toBe(true);
+      expect(result.roi).toBeCloseTo(1 / 3, 3);
+    });
+
+    it('breaks even when original and hedge odds are identical', () => {
+      // Same odds on both sides: gross return exactly covers both stakes
+      const result = hedgeBet(100, 100, 100);
+      expect(result.guaranteedProfit).toBe(0);
+      expect(result.isProfit).toBe(false);
+      expect(result.hedgeStake).toBe(100); // equal odds → hedge = original stake
+    });
+
+    it('reflects a loss when hedge odds are shorter than original', () => {
+      // Original at +100 (decimal 2.0), hedge at -200 (decimal 1.5)
+      const result = hedgeBet(100, 100, -200);
+      // hedgeStake = 100 * 2.0 / 1.5 ≈ 133.33
+      // grossReturn = 200; totalRisked ≈ 233.33; profit ≈ -33.33
+      expect(result.guaranteedProfit).toBeLessThan(0);
+      expect(result.isProfit).toBe(false);
+    });
+
+    it('gross return is equal for both outcome scenarios', () => {
+      // Property: hedgeStake * dHedge === originalStake * dOrig (equal gross)
+      const r = hedgeBet(200, 250, 150);
+      const dOrig = toDecimal(250);
+      const dHedge = toDecimal(150);
+      expect(r.hedgeStake * dHedge).toBeCloseTo(200 * dOrig, 1);
+      expect(r.grossReturn).toBeCloseTo(200 * dOrig, 1);
+    });
+
+    it('throws on non-positive stake', () => {
+      expect(() => hedgeBet(0, 200, -150)).toThrow(RangeError);
+      expect(() => hedgeBet(-100, 200, -150)).toThrow(RangeError);
     });
   });
 });

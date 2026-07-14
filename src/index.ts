@@ -1160,3 +1160,70 @@ export function dutching(
     overround: Math.round(overround * 10000) / 10000,
   };
 }
+
+// ─── Hedge Bet ────────────────────────────────────────────────────────────────
+
+export interface HedgeResult {
+  /** Stake to place on the opposite side to lock in equal gross returns */
+  hedgeStake: number;
+  /** Guaranteed net profit regardless of which outcome wins */
+  guaranteedProfit: number;
+  /** True when the hedge produces a net positive return */
+  isProfit: boolean;
+  /** Combined ROI on all money committed (original + hedge) */
+  roi: number;
+  /** Total capital at risk across both legs */
+  totalRisked: number;
+  /** Gross payout from whichever side wins (identical for both scenarios) */
+  grossReturn: number;
+}
+
+/**
+ * Calculate the hedge stake that locks in an equal guaranteed return on an
+ * existing bet when the opposite side is now available at better odds.
+ *
+ * The classic scenario: you placed an early-season bet on an underdog at +300;
+ * they reach the final and the opposite side now offers +100. Hedging lets you
+ * guarantee a profit no matter who wins.
+ *
+ * The formula equalises the gross payout for both outcomes:
+ *   `hedgeStake = originalStake × decimal(originalOdds) / decimal(hedgeOdds)`
+ *
+ * Profit is positive when the original odds are long enough that gross return
+ * exceeds combined stakes. See `arbitrage()` for the symmetric two-sided case.
+ *
+ * @param originalStake       Amount placed on your original bet
+ * @param originalAmericanOdds American odds at which you placed the original bet
+ * @param hedgeAmericanOdds   Current American odds on the opposite outcome
+ *
+ * @example
+ * // Bet $100 at +300 pre-season; they made the final, opposite now at +100
+ * hedgeBet(100, 300, 100);
+ * // → { hedgeStake: 200, guaranteedProfit: 100, isProfit: true, roi: 0.333 }
+ */
+export function hedgeBet(
+  originalStake: number,
+  originalAmericanOdds: number,
+  hedgeAmericanOdds: number,
+): HedgeResult {
+  if (!Number.isFinite(originalStake) || originalStake <= 0) {
+    throw new RangeError('originalStake must be a positive finite number');
+  }
+
+  const dOrig = toDecimal(originalAmericanOdds);
+  const dHedge = toDecimal(hedgeAmericanOdds);
+
+  const grossReturn = Math.round(originalStake * dOrig * 100) / 100;
+  const hedgeStake = Math.round((grossReturn / dHedge) * 100) / 100;
+  const totalRisked = Math.round((originalStake + hedgeStake) * 100) / 100;
+  const guaranteedProfit = Math.round((grossReturn - totalRisked) * 100) / 100;
+
+  return {
+    hedgeStake,
+    guaranteedProfit,
+    isProfit: guaranteedProfit > 0,
+    roi: totalRisked > 0 ? Math.round((guaranteedProfit / totalRisked) * 10000) / 10000 : 0,
+    totalRisked,
+    grossReturn,
+  };
+}
