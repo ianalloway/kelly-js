@@ -23,12 +23,10 @@ console.log(stats.maxDrawdown);
 
 ## Install
 
-> Not yet on the npm registry (2FA publish token required). Until then:
-
 ```bash
-npm install github:ianalloway/kelly-js
+npm install @ianalloway/kelly-js
 # or
-pnpm add github:ianalloway/kelly-js
+pnpm add @ianalloway/kelly-js
 ```
 
 ## API highlights
