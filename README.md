@@ -23,10 +23,12 @@ console.log(stats.maxDrawdown);
 
 ## Install
 
+> npm registry publish pending (needs granular token with **Bypass 2FA**). Until then:
+
 ```bash
-npm install @ianalloway/kelly-js
+npm install github:ianalloway/kelly-js
 # or
-pnpm add @ianalloway/kelly-js
+pnpm add github:ianalloway/kelly-js
 ```
 
 ## API highlights
