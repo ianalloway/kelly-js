@@ -12,17 +12,20 @@ Thanks for your interest in contributing! Here's how to get started.
 
 ## Development Setup
 
+kelly-js is a single-package TypeScript library with zero runtime dependencies.
+
 ```bash
 git clone https://github.com/ianalloway/kelly-js
 cd kelly-js
-npm install      # or: pip install -r requirements.txt
-npm run dev      # or: python main.py
+npm install
+npm test          # run the Jest suite
+npm run build     # compile src/index.ts -> dist/ with tsc
 ```
 
 ## Code Style
 
-- **TypeScript/JS**: ESLint + Prettier (config in repo). Run `npm run lint` before committing.
-- **Python**: Black + isort. Run `black . && isort .` before committing.
+- TypeScript, zero runtime dependencies — don't add any without discussing it first.
+- Run `npm run lint` (type-checks main + test sources) before committing.
 - Keep functions small and focused — one job per function.
 - Write self-documenting code; add comments only where logic is non-obvious.
 
