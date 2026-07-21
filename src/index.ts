@@ -23,6 +23,10 @@ export interface KellyResult {
   edge: number;
   /** Whether this bet has positive expected value */
   hasEdge: boolean;
+  /** Arbitrary fractional Kelly multiplier */
+  fractionalKelly: (multiplier: number) => number;
+  /** Dollar amount at arbitrary fractional Kelly given bankroll */
+  fractionalDollars: (multiplier: number, bankroll: number) => number;
 }
 
 export interface CLVResult {
@@ -261,6 +265,15 @@ export function kelly(winProbability: number, americanOdds: number): KellyResult
     ev: Math.round(ev * 10000) / 10000,
     edge: Math.round(edge * 10000) / 10000,
     hasEdge: ev > 0,
+    fractionalKelly: (multiplier: number) => {
+      if (!Number.isFinite(multiplier) || multiplier < 0) throw new RangeError('multiplier must be a finite non-negative number');
+      return Math.round((fraction * multiplier) * 10000) / 10000;
+    },
+    fractionalDollars: (multiplier: number, bankroll: number) => {
+      if (!Number.isFinite(multiplier) || multiplier < 0) throw new RangeError('multiplier must be a finite non-negative number');
+      if (!Number.isFinite(bankroll) || bankroll < 0) throw new RangeError('bankroll must be a finite non-negative number');
+      return Math.round(bankroll * fraction * multiplier * 100) / 100;
+    },
   };
 }
 
