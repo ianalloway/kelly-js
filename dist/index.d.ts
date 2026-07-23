@@ -20,6 +20,10 @@ export interface KellyResult {
     edge: number;
     /** Whether this bet has positive expected value */
     hasEdge: boolean;
+    /** Arbitrary fractional Kelly multiplier */
+    fractionalKelly: (multiplier: number) => number;
+    /** Dollar amount at arbitrary fractional Kelly given bankroll */
+    fractionalDollars: (multiplier: number, bankroll: number) => number;
 }
 export interface CLVResult {
     /** Opening line (American odds) */
@@ -531,4 +535,42 @@ export declare function dutching(outcomes: Array<{
     label: string;
     americanOdds: number;
 }>, totalStake?: number): DutchResult;
+export interface HedgeResult {
+    /** Stake to place on the opposite side to lock in equal gross returns */
+    hedgeStake: number;
+    /** Guaranteed net profit regardless of which outcome wins */
+    guaranteedProfit: number;
+    /** True when the hedge produces a net positive return */
+    isProfit: boolean;
+    /** Combined ROI on all money committed (original + hedge) */
+    roi: number;
+    /** Total capital at risk across both legs */
+    totalRisked: number;
+    /** Gross payout from whichever side wins (identical for both scenarios) */
+    grossReturn: number;
+}
+/**
+ * Calculate the hedge stake that locks in an equal guaranteed return on an
+ * existing bet when the opposite side is now available at better odds.
+ *
+ * The classic scenario: you placed an early-season bet on an underdog at +300;
+ * they reach the final and the opposite side now offers +100. Hedging lets you
+ * guarantee a profit no matter who wins.
+ *
+ * The formula equalises the gross payout for both outcomes:
+ *   `hedgeStake = originalStake × decimal(originalOdds) / decimal(hedgeOdds)`
+ *
+ * Profit is positive when the original odds are long enough that gross return
+ * exceeds combined stakes. See `arbitrage()` for the symmetric two-sided case.
+ *
+ * @param originalStake       Amount placed on your original bet
+ * @param originalAmericanOdds American odds at which you placed the original bet
+ * @param hedgeAmericanOdds   Current American odds on the opposite outcome
+ *
+ * @example
+ * // Bet $100 at +300 pre-season; they made the final, opposite now at +100
+ * hedgeBet(100, 300, 100);
+ * // → { hedgeStake: 200, guaranteedProfit: 100, isProfit: true, roi: 0.333 }
+ */
+export declare function hedgeBet(originalStake: number, originalAmericanOdds: number, hedgeAmericanOdds: number): HedgeResult;
 //# sourceMappingURL=index.d.ts.map

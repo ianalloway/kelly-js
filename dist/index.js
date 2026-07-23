@@ -29,6 +29,7 @@ exports.marketConsensus = marketConsensus;
 exports.poissonModel = poissonModel;
 exports.kellyGrowthRate = kellyGrowthRate;
 exports.dutching = dutching;
+exports.hedgeBet = hedgeBet;
 // ─── Odds Conversion ──────────────────────────────────────────────────────────
 /**
  * Convert American odds to implied probability (includes vig).
@@ -144,6 +145,18 @@ function kelly(winProbability, americanOdds) {
         ev: Math.round(ev * 10000) / 10000,
         edge: Math.round(edge * 10000) / 10000,
         hasEdge: ev > 0,
+        fractionalKelly: (multiplier) => {
+            if (!Number.isFinite(multiplier) || multiplier < 0)
+                throw new RangeError('multiplier must be a finite non-negative number');
+            return Math.round((fraction * multiplier) * 10000) / 10000;
+        },
+        fractionalDollars: (multiplier, bankroll) => {
+            if (!Number.isFinite(multiplier) || multiplier < 0)
+                throw new RangeError('multiplier must be a finite non-negative number');
+            if (!Number.isFinite(bankroll) || bankroll < 0)
+                throw new RangeError('bankroll must be a finite non-negative number');
+            return Math.round(bankroll * fraction * multiplier * 100) / 100;
+        },
     };
 }
 /**
@@ -850,6 +863,48 @@ function dutching(outcomes, totalStake = 1000) {
         stakes,
         totalStake,
         overround: Math.round(overround * 10000) / 10000,
+    };
+}
+/**
+ * Calculate the hedge stake that locks in an equal guaranteed return on an
+ * existing bet when the opposite side is now available at better odds.
+ *
+ * The classic scenario: you placed an early-season bet on an underdog at +300;
+ * they reach the final and the opposite side now offers +100. Hedging lets you
+ * guarantee a profit no matter who wins.
+ *
+ * The formula equalises the gross payout for both outcomes:
+ *   `hedgeStake = originalStake × decimal(originalOdds) / decimal(hedgeOdds)`
+ *
+ * Profit is positive when the original odds are long enough that gross return
+ * exceeds combined stakes. See `arbitrage()` for the symmetric two-sided case.
+ *
+ * @param originalStake       Amount placed on your original bet
+ * @param originalAmericanOdds American odds at which you placed the original bet
+ * @param hedgeAmericanOdds   Current American odds on the opposite outcome
+ *
+ * @example
+ * // Bet $100 at +300 pre-season; they made the final, opposite now at +100
+ * hedgeBet(100, 300, 100);
+ * // → { hedgeStake: 200, guaranteedProfit: 100, isProfit: true, roi: 0.333 }
+ */
+function hedgeBet(originalStake, originalAmericanOdds, hedgeAmericanOdds) {
+    if (!Number.isFinite(originalStake) || originalStake <= 0) {
+        throw new RangeError('originalStake must be a positive finite number');
+    }
+    const dOrig = toDecimal(originalAmericanOdds);
+    const dHedge = toDecimal(hedgeAmericanOdds);
+    const grossReturn = Math.round(originalStake * dOrig * 100) / 100;
+    const hedgeStake = Math.round((grossReturn / dHedge) * 100) / 100;
+    const totalRisked = Math.round((originalStake + hedgeStake) * 100) / 100;
+    const guaranteedProfit = Math.round((grossReturn - totalRisked) * 100) / 100;
+    return {
+        hedgeStake,
+        guaranteedProfit,
+        isProfit: guaranteedProfit > 0,
+        roi: totalRisked > 0 ? Math.round((guaranteedProfit / totalRisked) * 10000) / 10000 : 0,
+        totalRisked,
+        grossReturn,
     };
 }
 //# sourceMappingURL=index.js.map

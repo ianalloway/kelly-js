@@ -10,8 +10,8 @@
 import { kelly, clv, bankrollStats } from '@ianalloway/kelly-js';
 
 const k = kelly(0.58, -110);
-console.log(k.fraction);         // 0.0714
-console.log(k.halfDollars(1000)) // $35.71
+console.log(k.fraction);         // 0.118
+console.log(k.halfDollars(1000)) // 59
 
 const c = clv(-108, -115);
 console.log(c.verdict);          // 'positive'

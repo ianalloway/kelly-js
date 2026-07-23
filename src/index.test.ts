@@ -92,6 +92,31 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
       const result = kelly(0.6, 100); // +100 = 2.0 decimal
       expect(result.ev).toBeCloseTo(0.2, 2);
     });
+
+    it('returns correct fractionalKelly values', () => {
+      const result = kelly(0.58, -110);
+      expect(result.fractionalKelly(0)).toBe(0);
+      expect(result.fractionalKelly(0.5)).toBe(result.halfKelly);
+      expect(result.fractionalKelly(1)).toBe(result.fraction);
+      expect(result.fractionalKelly(2)).toBe(result.fraction * 2);
+    });
+
+    it('fractionalKelly throws on negative multiplier', () => {
+      const result = kelly(0.58, -110);
+      expect(() => result.fractionalKelly(-0.5)).toThrow(RangeError);
+    });
+
+    it('fractionalDollars matches dollars * multiplier', () => {
+      const result = kelly(0.58, -110);
+      expect(result.fractionalDollars(0.5, 1000)).toBe(result.halfDollars(1000));
+      expect(result.fractionalDollars(1, 1000)).toBe(result.dollars(1000));
+    });
+
+    it('fractionalDollars throws on invalid inputs', () => {
+      const result = kelly(0.58, -110);
+      expect(() => result.fractionalDollars(-0.5, 1000)).toThrow(RangeError);
+      expect(() => result.fractionalDollars(0.5, -1000)).toThrow(RangeError);
+    });
   });
 
   describe('kellyParlay()', () => {
