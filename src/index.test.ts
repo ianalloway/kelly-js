@@ -23,6 +23,7 @@ import {
   dutching,
   kellyParlay,
   hedgeBet,
+  optimalFractionalKelly,
 } from './index';
 
 describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
@@ -1016,6 +1017,35 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
     it('throws on non-positive lambda', () => {
       expect(() => poissonModel(0, 1.5)).toThrow(RangeError);
       expect(() => poissonModel(1.5, -1)).toThrow(RangeError);
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // optimalFractionalKelly() — multiplier bounded by drawdown constraint
+  // ────────────────────────────────────────────────────────────────────────────
+
+  describe('optimalFractionalKelly()', () => {
+    it('returns 0 for non-positive edge', () => {
+      expect(optimalFractionalKelly(0, 0.01, 0.5)).toBe(0);
+      expect(optimalFractionalKelly(-0.1, 0.01, 0.5)).toBe(0);
+    });
+
+    it('returns a value in [0, 1] for valid inputs', () => {
+      const result = optimalFractionalKelly(0.05, 0.01, 0.5);
+      expect(result).toBeGreaterThanOrEqual(0);
+      expect(result).toBeLessThanOrEqual(1);
+    });
+
+    it('produces expected value for a known input', () => {
+      // edge=0.05, variance=0.01, maxDrawdown=0.5, riskOfDrawdown=0.1
+      // multiplier ≈ log(0.1) / (log(0.5) * 10) ≈ 0.3322
+      const result = optimalFractionalKelly(0.05, 0.01, 0.5);
+      expect(result).toBeCloseTo(0.3322, 2);
+    });
+
+    it('clamps result to 1 when multiplier would exceed 1', () => {
+      const result = optimalFractionalKelly(0.02, 0.01, 0.3);
+      expect(result).toBeLessThanOrEqual(1);
     });
   });
 
