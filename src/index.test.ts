@@ -583,7 +583,9 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
         { winProbability: 0.58, americanOdds: -110 },
       ], 0.20);
       const totalFraction = portfolio.reduce((sum, b) => sum + b.fraction, 0);
-      expect(totalFraction).toBeLessThanOrEqual(0.25); // 25% max exposure
+      // Each fraction rounds to 4 decimals; total may equal maxExposure exactly or
+      // trail by ≤1ulp due to rounding, so use toBeCloseTo instead of a hard bound.
+      expect(totalFraction).toBeCloseTo(0.20, 3);
     });
 
     it('does not scale if total fraction within max exposure', () => {
