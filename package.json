@@ -11,7 +11,9 @@
       "require": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build",
@@ -20,7 +22,15 @@
     "lint": "tsc --noEmit && tsc -p tsconfig.test.json",
     "prepublishOnly": "npm run lint && npm run test && npm run test:dist"
   },
-  "keywords": ["kelly", "criterion", "sports-betting", "bankroll", "clv", "expected-value", "gambling"],
+  "keywords": [
+    "kelly",
+    "criterion",
+    "sports-betting",
+    "bankroll",
+    "clv",
+    "expected-value",
+    "gambling"
+  ],
   "author": "Ian Alloway <ian@allowayllc.com>",
   "license": "MIT",
   "homepage": "https://github.com/ianalloway/kelly-js#readme",
@@ -32,9 +42,14 @@
     "url": "https://github.com/ianalloway/kelly-js/issues"
   },
   "devDependencies": {
+    "@babel/core": "^8.0.1",
+    "@babel/preset-typescript": "^8.0.1",
     "@types/jest": "^30.0.0",
+    "babel-jest": "^30.4.2",
     "jest": "^30.4.2",
-    "ts-jest": "^29.4.12",
-    "typescript": "^6.0.3"
+    "typescript": "~7.0.2"
+  },
+  "engines": {
+    "node": ">=22.18.0"
   }
 }
