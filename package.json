@@ -15,7 +15,7 @@
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build",
-    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "test": "vitest run",
     "test:dist": "npm run build && node scripts/verify-dist.cjs",
     "lint": "tsc --noEmit && tsc -p tsconfig.test.json",
     "prepublishOnly": "npm run lint && npm run test && npm run test:dist"
@@ -38,11 +38,8 @@
     "node": ">=22.18.0"
   },
   "devDependencies": {
-    "@babel/core": "^8.0.1",
-    "@babel/preset-typescript": "^8.0.1",
-    "@types/jest": "^30.0.0",
-    "babel-jest": "^30.4.2",
-    "jest": "^30.4.2",
-    "typescript": "~7.0.2"
+    "@types/node": "^22.15.0",
+    "typescript": "~7.0.2",
+    "vitest": "^4.1.10"
   }
 }
