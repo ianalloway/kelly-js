@@ -14,6 +14,7 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsc",
+    "prepare": "npm run build",
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
     "test:dist": "npm run build && node scripts/verify-dist.cjs",
     "lint": "tsc --noEmit && tsc -p tsconfig.test.json",
