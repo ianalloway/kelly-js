@@ -34,10 +34,15 @@
   "bugs": {
     "url": "https://github.com/ianalloway/kelly-js/issues"
   },
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "devDependencies": {
+    "@babel/core": "^8.0.1",
+    "@babel/preset-typescript": "^8.0.1",
     "@types/jest": "^30.0.0",
+    "babel-jest": "^30.4.2",
     "jest": "^30.4.2",
-    "ts-jest": "^29.4.12",
-    "typescript": "^6.0.3"
+    "typescript": "~7.0.2"
   }
 }
