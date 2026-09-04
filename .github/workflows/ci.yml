@@ -15,20 +15,19 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: '22'
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --ignore-scripts --legacy-peer-deps
+
+      - name: Build
+        run: npm run build
 
       - name: Type check (src + tests)
         run: npm run lint
 
       - name: Test
         run: npm test
-
-      - name: Build
-        run: npx tsc
 
       - name: Verify exports
         run: node -e "const k = require('./dist/index.js'); console.log('kelly(-110, 0.58):', k.kelly(0.58, -110).fraction); console.log('clv:', k.clv(-108, -115).verdict);"
@@ -41,10 +40,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
-      - run: npm install
-      - run: npx tsc
+      - run: npm install --ignore-scripts --legacy-peer-deps
+      - run: npm run build
       - run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

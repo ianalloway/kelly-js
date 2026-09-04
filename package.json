@@ -15,7 +15,7 @@
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build",
-    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "test": "vitest run",
     "test:dist": "npm run build && node scripts/verify-dist.cjs",
     "lint": "tsc --noEmit && tsc -p tsconfig.test.json",
     "prepublishOnly": "npm run lint && npm run test && npm run test:dist"
@@ -34,10 +34,13 @@
   "bugs": {
     "url": "https://github.com/ianalloway/kelly-js/issues"
   },
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "devDependencies": {
-    "@types/jest": "^30.0.0",
-    "jest": "^30.4.2",
-    "ts-jest": "^29.4.12",
-    "typescript": "^6.0.3"
+    "@types/node": "^22.15.0",
+    "typescript": "~7.0.2",
+    "vite": "^7.0.0",
+    "vitest": "^5.0.0"
   }
 }
