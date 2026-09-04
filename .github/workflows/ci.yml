@@ -18,7 +18,16 @@ jobs:
           node-version: '22'
 
       - name: Install dependencies
-        run: npm install --ignore-scripts
+        run: |
+          set -o pipefail
+          npm install --ignore-scripts 2>&1 | tee npm-install.log
+
+      - name: Upload npm install log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-install-log
+          path: npm-install.log
 
       - name: Build
         run: npm run build
