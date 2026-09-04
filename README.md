@@ -23,12 +23,15 @@ console.log(stats.maxDrawdown);
 
 ## Install
 
-> **npm publish pending** — `@ianalloway/kelly-js` is **not** on the npm registry yet. Install from GitHub until then:
+> **npm publish pending** — `@ianalloway/kelly-js` is **not** on the npm registry yet.
+> Trusted Publishing is wired in [`.github/workflows/publish.yml`](.github/workflows/publish.yml).
+> Install from GitHub until then:
 
 ```bash
 npm install github:ianalloway/kelly-js
 # or
 pnpm add github:ianalloway/kelly-js
+# after npm: npm install @ianalloway/kelly-js
 ```
 
 `dist/` is gitignored; a `prepare` script runs `tsc` on install so the package entrypoints resolve. From a checkout: `npm install && npm run build`.
