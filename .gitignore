@@ -9,3 +9,7 @@
 *.pem
 *.key
 node_modules/
+
+# Build output (run `npm run build` locally / in CI; do not commit)
+dist/
+*.tsbuildinfo
