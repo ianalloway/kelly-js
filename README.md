@@ -23,13 +23,15 @@ console.log(stats.maxDrawdown);
 
 ## Install
 
-> npm registry publish pending (needs granular token with **Bypass 2FA**). Until then:
+> **npm publish pending** — `@ianalloway/kelly-js` is **not** on the npm registry yet. Install from GitHub until then:
 
 ```bash
 npm install github:ianalloway/kelly-js
 # or
 pnpm add github:ianalloway/kelly-js
 ```
+
+`dist/` is gitignored; a `prepare` script runs `tsc` on install so the package entrypoints resolve. From a checkout: `npm install && npm run build`.
 
 ## API highlights
 
