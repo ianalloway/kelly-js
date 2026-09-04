@@ -20,6 +20,9 @@
     "lint": "tsc --noEmit && tsc -p tsconfig.test.json",
     "prepublishOnly": "npm run lint && npm run test && npm run test:dist"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": ["kelly", "criterion", "sports-betting", "bankroll", "clv", "expected-value", "gambling"],
   "author": "Ian Alloway <ian@allowayllc.com>",
   "license": "MIT",
