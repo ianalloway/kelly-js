@@ -3,8 +3,8 @@
 **The sports bettor's math toolkit.** Kelly Criterion, CLV, EV, bankroll stats, odds conversion — TypeScript, zero dependencies, tree-shakeable.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/Tests-Jest-success?style=for-the-badge)](jest.config.js)
+[![TypeScript](https://img.shields.io/badge/TypeScript-7-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
+[![Tests](https://img.shields.io/badge/Tests-Vitest-success?style=for-the-badge)](vitest.config.ts)
 
 ```ts
 import { kelly, clv, bankrollStats } from '@ianalloway/kelly-js';
@@ -23,15 +23,15 @@ console.log(stats.maxDrawdown);
 
 ## Install
 
-> **npm publish pending** — `@ianalloway/kelly-js` is **not** on the npm registry yet.
-> Trusted Publishing is wired in [`.github/workflows/publish.yml`](.github/workflows/publish.yml).
-> Install from GitHub until then:
+Install from npm:
+
+
 
 ```bash
-npm install github:ianalloway/kelly-js
+npm install @ianalloway/kelly-js
 # or
-pnpm add github:ianalloway/kelly-js
-# after npm: npm install @ianalloway/kelly-js
+pnpm add @ianalloway/kelly-js
+
 ```
 
 `dist/` is gitignored; a `prepare` script runs `tsc` on install so the package entrypoints resolve. From a checkout: `npm install && npm run build`.
@@ -177,7 +177,7 @@ This is a compact, reusable package that turns betting math into something easy 
 
 ```bash
 npm run lint       # Type-check source and tests
-npm test           # Run Jest tests
+npm test           # Run Vitest tests
 npm run test:dist  # Rebuild dist/ and verify published exports
 ```
 
