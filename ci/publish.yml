@@ -1,0 +1,48 @@
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # OIDC for trusted publisher
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          # registry-url always set; NODE_AUTH_TOKEN optional via secrets.NPM_TOKEN
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts --legacy-peer-deps
+
+      - name: Build
+        run: npm run build
+
+      - name: Publish with provenance
+        id: npm_publish
+        env:
+          # Optional fallback secret; omit/empty when using Trusted Publisher OIDC
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
+
+      - name: Explain publish auth failures
+        if: failure() && steps.npm_publish.outcome == 'failure'
+        run: |
+          echo "::error::Publish failed. Auth issues often show up as 404."
+          echo "::error::Use Trusted Publisher or a repo token secret; not interactive login."
+          echo "::error::  1) npmjs.com package Settings → Trusted Publisher → GitHub Actions"
+          echo "::error::     repo ianalloway/kelly-js, workflow file publish.yml (OIDC id-token already granted)"
+          echo "::error::  2) Or set optional GitHub Actions secret NPM_TOKEN (automation scope)"
+          echo "::error::     NODE_AUTH_TOKEN is wired above; empty secret is fine with Trusted Publisher"

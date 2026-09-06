@@ -1,6 +1,6 @@
 {
   "name": "@ianalloway/kelly-js",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Kelly Criterion calculator for sports betting & investing — CLV, EV, bankroll management. Zero dependencies.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
