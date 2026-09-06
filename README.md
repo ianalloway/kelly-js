@@ -2,9 +2,13 @@
 
 **The sports bettor's math toolkit.** Kelly Criterion, CLV, EV, bankroll stats, odds conversion — TypeScript, zero dependencies, tree-shakeable.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-7-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/Tests-Vitest-success?style=for-the-badge)](vitest.config.ts)
+[![npm version](https://img.shields.io/npm/v/@ianalloway/kelly-js.svg)](https://www.npmjs.com/package/@ianalloway/kelly-js)
+[![License: MIT](https://img.shields.io/npm/l/@ianalloway/kelly-js.svg)](https://github.com/ianalloway/kelly-js/blob/main/LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-ready-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![CI](https://github.com/ianalloway/kelly-js/actions/workflows/ci.yml/badge.svg)](https://github.com/ianalloway/kelly-js/actions/workflows/ci.yml)
+[![Vitest](https://img.shields.io/badge/tested%20with-Vitest-6E9F18?logo=vitest&logoColor=white)](https://vitest.dev/)
+
+**npm:** [@ianalloway/kelly-js](https://www.npmjs.com/package/@ianalloway/kelly-js) · **repo:** [github.com/ianalloway/kelly-js](https://github.com/ianalloway/kelly-js)
 
 ```ts
 import { kelly, clv, bankrollStats } from '@ianalloway/kelly-js';
@@ -23,16 +27,13 @@ console.log(stats.maxDrawdown);
 
 ## Install
 
-Install from npm:
-
-
-
 ```bash
 npm install @ianalloway/kelly-js
 # or
 pnpm add @ianalloway/kelly-js
-
 ```
+
+Package page: [npmjs.com/package/@ianalloway/kelly-js](https://www.npmjs.com/package/@ianalloway/kelly-js)
 
 `dist/` is gitignored; a `prepare` script runs `tsc` on install so the package entrypoints resolve. From a checkout: `npm install && npm run build`.
 
@@ -181,10 +182,16 @@ npm test           # Run Vitest tests
 npm run test:dist  # Rebuild dist/ and verify published exports
 ```
 
+## Links
+
+- [npm package](https://www.npmjs.com/package/@ianalloway/kelly-js)
+- [GitHub repository](https://github.com/ianalloway/kelly-js)
+- [Issues](https://github.com/ianalloway/kelly-js/issues)
+
 ## Author
 
-Ian Alloway
+[Ian Alloway](https://github.com/ianalloway)
 
 ## License
 
-MIT
+[MIT](LICENSE)
