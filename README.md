@@ -35,6 +35,8 @@ pnpm add @ianalloway/kelly-js
 
 Package page: [npmjs.com/package/@ianalloway/kelly-js](https://www.npmjs.com/package/@ianalloway/kelly-js)
 
+> **Version note:** Git `main` may already be at **1.0.1** while the npm registry `latest` tag is still **1.0.0** until a Trusted Publisher / `NPM_TOKEN` publish succeeds. The npm version badge above tracks the registry, not the repo tag.
+
 `dist/` is gitignored; a `prepare` script runs `tsc` on install so the package entrypoints resolve. From a checkout: `npm install && npm run build`.
 
 ## API highlights
@@ -158,6 +160,7 @@ kellyGrowthRate(winProbability, americanOdds, fraction) // compare growth rate a
 parlayAnalysis(legs)                    // true EV/win prob for a multi-leg parlay
 arbitrage(oddsA, oddsB, totalStake?)    // guaranteed-profit stake split across two books
 dutching(outcomes, totalStake?)         // guaranteed-profit stake split across 3+ outcomes
+hedgeBet(originalStake, originalOdds, hedgeOdds) // lock profit by staking the opposite side
 marketConsensus(books)                  // de-vig and average odds across books
 poissonModel(lambda1, lambda2, maxGoals?) // win/draw/loss + totals model for scoring sports
 ownershipLeverage(projectedPoints, ownershipPct) // DFS contrarian-play score
@@ -181,6 +184,17 @@ npm run lint       # Type-check source and tests
 npm test           # Run Vitest tests
 npm run test:dist  # Rebuild dist/ and verify published exports
 ```
+
+## Publishing
+
+Releases go out via [`.github/workflows/publish.yml`](.github/workflows/publish.yml) on `release` or `workflow_dispatch`.
+
+Auth options (either works):
+
+1. **Trusted Publisher (preferred)** — on npmjs.com package Settings → Trusted Publisher → GitHub Actions, set owner `ianalloway`, repo `kelly-js`, workflow `publish.yml` (OIDC `id-token` is already granted).
+2. **`NPM_TOKEN`** — optional GitHub Actions secret with automation-scope access; leave it empty when using Trusted Publisher.
+
+Until that publish succeeds, install from npm may still resolve **1.0.0** even though `main` carries **1.0.1**.
 
 ## Links
 

@@ -1,7 +1,7 @@
 {
   "name": "@ianalloway/kelly-js",
   "version": "1.0.1",
-  "description": "Kelly Criterion calculator for sports betting & investing — CLV, EV, bankroll management. Zero dependencies.",
+  "description": "Tree-shakeable TypeScript toolkit for Kelly Criterion, CLV, EV, bankroll stats, odds conversion, line shopping, and hedge sizing \u2014 zero runtime dependencies.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -11,7 +11,9 @@
       "require": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build",
@@ -23,7 +25,21 @@
   "publishConfig": {
     "access": "public"
   },
-  "keywords": ["kelly", "criterion", "sports-betting", "bankroll", "clv", "expected-value", "gambling"],
+  "keywords": [
+    "kelly",
+    "kelly-criterion",
+    "sports-betting",
+    "bankroll",
+    "clv",
+    "expected-value",
+    "odds-conversion",
+    "line-shopping",
+    "parlay",
+    "hedge",
+    "monte-carlo",
+    "typescript",
+    "gambling"
+  ],
   "author": "Ian Alloway <ian@allowayllc.com>",
   "license": "MIT",
   "homepage": "https://github.com/ianalloway/kelly-js#readme",
