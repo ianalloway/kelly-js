@@ -401,6 +401,63 @@ export function expectedValue(
   };
 }
 
+/**
+ * Minimum win-probability edge over break-even needed for a target EV.
+ *
+ * Break-even win rate equals implied probability (`impliedProb`). This helper
+ * answers the follow-up bettors ask constantly: how many probability points
+ * above that line do I need for a given expected value per unit staked?
+ *
+ * @param americanOdds Offered American odds
+ * @param targetEv     Desired EV as a fraction of stake (default 0 = break-even;
+ *                     pass `0.05` for a 5% ROI target)
+ * @returns Edge in probability points (0–1 scale), e.g. `0.0262` ≈ 2.62 pts
+ *
+ * @example
+ * minEdge(-110)        // 0        — any edge beats break-even
+ * minEdge(-110, 0.05)  // 0.0262   — need ~2.62 pts above implied for 5% EV
+ * minEdge(+150, 0.10)  // 0.04     — need 4 pts above implied for 10% EV
+ */
+export function minEdge(americanOdds: number, targetEv = 0): number {
+  if (!Number.isFinite(americanOdds) || americanOdds === 0) {
+    throw new RangeError('americanOdds must be a finite non-zero number');
+  }
+  if (!Number.isFinite(targetEv)) {
+    throw new RangeError('targetEv must be a finite number');
+  }
+  const decimal = toDecimal(americanOdds);
+  // Max EV per unit stake is (decimal - 1); min is -1 (always lose)
+  if (targetEv < -1 || targetEv > decimal - 1) {
+    throw new RangeError(
+      `targetEv must be between -1 and ${decimal - 1} (max EV at these odds) inclusive`
+    );
+  }
+  // p* = (1 + targetEv) / decimal; edge = p* - 1/decimal = targetEv / decimal
+  return Math.round((targetEv / decimal) * 10000) / 10000;
+}
+
+/**
+ * Stake required to net a target profit if the bet wins.
+ *
+ * @param americanOdds Offered American odds
+ * @param targetProfit Desired net profit on a win (dollars)
+ * @returns Stake to place (dollars)
+ *
+ * @example
+ * stakeForTargetProfit(-110, 100) // 110 — risk $110 to win $100 at -110
+ * stakeForTargetProfit(+150, 75)  // 50  — risk $50 to win $75 at +150
+ */
+export function stakeForTargetProfit(americanOdds: number, targetProfit: number): number {
+  if (!Number.isFinite(americanOdds) || americanOdds === 0) {
+    throw new RangeError('americanOdds must be a finite non-zero number');
+  }
+  if (!Number.isFinite(targetProfit) || targetProfit <= 0) {
+    throw new RangeError('targetProfit must be a positive finite number');
+  }
+  const b = toDecimal(americanOdds) - 1; // net odds
+  return Math.round((targetProfit / b) * 100) / 100;
+}
+
 // ─── Closing Line Value ───────────────────────────────────────────────────────
 
 /**

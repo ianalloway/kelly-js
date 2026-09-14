@@ -74,11 +74,19 @@ convertOdds(american)
 removeVig(side1, side2)
 ```
 
-### Expected value
+### Expected value & break-even helpers
 
 ```ts
 expectedValue(winProbability, americanOdds, stake?)
+minEdge(americanOdds, targetEv?)           // prob points above break-even for a target EV/stake
+stakeForTargetProfit(americanOdds, targetProfit) // stake needed to net $X on a win
 ```
+
+Break-even win rate is `impliedProb(odds)` (also returned as `breakEvenProb` from
+`expectedValue`). Use `minEdge` when you already know the line and want the edge
+required for a target ROI — e.g. `minEdge(-110, 0.05)` → `0.0262` (~2.62 pts above
+implied for a 5% EV). Use `stakeForTargetProfit` to size a bet to a dollar target:
+`stakeForTargetProfit(-110, 100)` → `110`.
 
 ### Closing Line Value
 
