@@ -24,6 +24,8 @@ import {
   kellyParlay,
   hedgeBet,
   optimalFractionalKelly,
+  minEdge,
+  stakeForTargetProfit,
 } from './index';
 
 describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
@@ -629,6 +631,69 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
       const result = expectedValue(0.60, -110);
       expect(typeof result.ev).toBe('number');
       expect(result.evPercent).toBeCloseTo(result.ev * 100, 0);
+    });
+  });
+
+  describe('minEdge()', () => {
+    it('returns 0 at default targetEv (break-even)', () => {
+      expect(minEdge(-110)).toBe(0);
+      expect(minEdge(150)).toBe(0);
+    });
+
+    it('computes edge needed for a 5% EV target at -110', () => {
+      // decimal ≈ 1.90909; edge = 0.05 / decimal ≈ 0.0262
+      expect(minEdge(-110, 0.05)).toBe(0.0262);
+    });
+
+    it('computes edge needed for a 10% EV target at +150', () => {
+      // decimal = 2.5; edge = 0.10 / 2.5 = 0.04
+      expect(minEdge(150, 0.10)).toBe(0.04);
+    });
+
+    it('matches expectedValue break-even + edge for target win rate', () => {
+      const odds = -110;
+      const targetEv = 0.05;
+      const edge = minEdge(odds, targetEv);
+      const pStar = impliedProb(odds) + edge;
+      const { evPercent } = expectedValue(pStar, odds, 1);
+      // evPercent is percent of stake; targetEv 0.05 → ~5%
+      expect(evPercent).toBeCloseTo(5, 0);
+    });
+
+    it('throws on zero or non-finite odds', () => {
+      expect(() => minEdge(0)).toThrow(RangeError);
+      expect(() => minEdge(Number.NaN)).toThrow(RangeError);
+    });
+
+    it('throws when targetEv is outside achievable EV range', () => {
+      expect(() => minEdge(-110, -1.5)).toThrow(RangeError);
+      expect(() => minEdge(-110, 2)).toThrow(RangeError); // max EV at -110 is ~0.909
+    });
+  });
+
+  describe('stakeForTargetProfit()', () => {
+    it('sizes stake to win $100 at -110', () => {
+      // b = 100/110; stake = 100 / b = 110
+      expect(stakeForTargetProfit(-110, 100)).toBe(110);
+    });
+
+    it('sizes stake to win $75 at +150', () => {
+      // b = 1.5; stake = 75 / 1.5 = 50
+      expect(stakeForTargetProfit(150, 75)).toBe(50);
+    });
+
+    it('sizes stake to win $50 at +200', () => {
+      expect(stakeForTargetProfit(200, 50)).toBe(25);
+    });
+
+    it('throws on non-positive targetProfit', () => {
+      expect(() => stakeForTargetProfit(-110, 0)).toThrow(RangeError);
+      expect(() => stakeForTargetProfit(-110, -10)).toThrow(RangeError);
+    });
+
+    it('throws on zero or non-finite odds', () => {
+      expect(() => stakeForTargetProfit(0, 100)).toThrow(RangeError);
+      expect(() => stakeForTargetProfit(Number.NaN, 100)).toThrow(RangeError);
     });
   });
 
