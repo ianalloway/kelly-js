@@ -148,8 +148,25 @@ export interface LineShopResult {
  * @example impliedProb(-110) // 0.5238
  */
 export function impliedProb(american: number): number {
+  if (!Number.isFinite(american) || american === 0) {
+    throw new RangeError('american odds must be a finite non-zero number');
+  }
   if (american > 0) return 100 / (american + 100);
   return Math.abs(american) / (Math.abs(american) + 100);
+}
+
+/**
+ * Convert an implied (or fair/no-vig) probability to American odds.
+ * Inverse of {@link impliedProb} for round-trips (subject to integer rounding).
+ *
+ * @example fromImpliedProb(0.5238) // -110
+ * @example fromImpliedProb(0.4)    // +150
+ */
+export function fromImpliedProb(probability: number): number {
+  if (!Number.isFinite(probability) || probability <= 0 || probability >= 1) {
+    throw new RangeError('probability must be a finite number strictly between 0 and 1');
+  }
+  return probToAmerican(probability);
 }
 
 /**
@@ -157,7 +174,9 @@ export function impliedProb(american: number): number {
  * @example toDecimal(-110) // 1.909
  */
 export function toDecimal(american: number): number {
-  if (american === 0) throw new RangeError('American odds cannot be zero');
+  if (!Number.isFinite(american) || american === 0) {
+    throw new RangeError('American odds must be a finite non-zero number');
+  }
   if (american > 0) return american / 100 + 1;
   return 100 / Math.abs(american) + 1;
 }
@@ -167,15 +186,30 @@ export function toDecimal(american: number): number {
  * @example toAmerican(1.909) // -110
  */
 export function toAmerican(decimal: number): number {
-  if (decimal <= 1) throw new RangeError('Decimal odds must be greater than 1');
+  if (!Number.isFinite(decimal) || decimal <= 1) {
+    throw new RangeError('Decimal odds must be a finite number greater than 1');
+  }
   if (decimal >= 2) return Math.round((decimal - 1) * 100);
   return Math.round(-100 / (decimal - 1));
 }
 
 /**
  * Full odds conversion — American → decimal, fractional, implied prob.
+ *
+ * Pass `oppositeOdds` (the other side of a two-way market) to include a real
+ * no-vig probability for this side. The former `vigRemoval: true` boolean was
+ * a no-op lie (it copied the vig-inclusive implied prob); use `removeVig` or
+ * pass the opposite line here instead.
  */
-export function convertOdds(american: number, vigRemoval = false): OddsConversion {
+export function convertOdds(
+  american: number,
+  oppositeOdds?: number | boolean
+): OddsConversion {
+  if (typeof oppositeOdds === 'boolean') {
+    throw new TypeError(
+      'convertOdds no longer accepts a vigRemoval boolean; pass oppositeOdds (number) for no-vig, or use removeVig()'
+    );
+  }
   const implied = impliedProb(american);
   const decimal = toDecimal(american);
   const absAmerican = Math.abs(american);
@@ -187,13 +221,19 @@ export function convertOdds(american: number, vigRemoval = false): OddsConversio
   const g = gcd(num, den);
   const fractional = `${num / g}/${den / g}`;
 
-  return {
+  const result: OddsConversion = {
     american,
     decimal: Math.round(decimal * 1000) / 1000,
     fractional,
     impliedProbability: Math.round(implied * 10000) / 10000,
-    ...(vigRemoval ? { noVigProbability: implied } : {}),
   };
+
+  if (oppositeOdds !== undefined) {
+    const { prob1 } = removeVig(american, oppositeOdds);
+    result.noVigProbability = prob1;
+  }
+
+  return result;
 }
 
 /**
@@ -209,6 +249,9 @@ export function removeVig(
   const p1 = impliedProb(side1);
   const p2 = impliedProb(side2);
   const total = p1 + p2;
+  if (!(total > 0)) {
+    throw new RangeError('combined implied probabilities must be positive');
+  }
   const vig = total - 1;
   return {
     prob1: Math.round((p1 / total) * 10000) / 10000,
@@ -232,8 +275,8 @@ export function removeVig(
  * console.log(k.halfDollars(1000)); // 35.71
  */
 export function kelly(winProbability: number, americanOdds: number): KellyResult {
-  if (winProbability <= 0 || winProbability >= 1) {
-    throw new RangeError('winProbability must be between 0 and 1 exclusive');
+  if (!Number.isFinite(winProbability) || winProbability <= 0 || winProbability >= 1) {
+    throw new RangeError('winProbability must be a finite number between 0 and 1 exclusive');
   }
   if (!Number.isFinite(americanOdds) || americanOdds === 0) {
     throw new RangeError('americanOdds must be a finite non-zero number');
@@ -330,10 +373,21 @@ export function optimalFractionalKelly(
   maxDrawdown: number,
   riskOfDrawdown = 0.1
 ): number {
+  if (!Number.isFinite(edge) || !Number.isFinite(variance) || !Number.isFinite(maxDrawdown) || !Number.isFinite(riskOfDrawdown)) {
+    throw new RangeError('all arguments must be finite numbers');
+  }
   if (edge <= 0) return 0;
-  // Based on the formula: f = (2 * edge / variance) * (ln(riskOfDrawdown) / ln(1 - maxDrawdown))
-  // Simplified version for betting: f = edge / variance
-  const fullKelly = edge / variance;
+  if (variance <= 0) {
+    throw new RangeError('variance must be positive');
+  }
+  if (maxDrawdown <= 0 || maxDrawdown >= 1) {
+    throw new RangeError('maxDrawdown must be between 0 and 1 exclusive');
+  }
+  if (riskOfDrawdown <= 0 || riskOfDrawdown >= 1) {
+    throw new RangeError('riskOfDrawdown must be between 0 and 1 exclusive');
+  }
+  // Fractional Kelly multiplier constrained by drawdown risk:
+  //   multiplier = ln(risk) / (ln(1 - maxDD) * (2 * edge / variance))
   const multiplier = Math.log(riskOfDrawdown) / (Math.log(1 - maxDrawdown) * (2 * edge / variance));
   return Math.max(0, Math.min(1, multiplier));
 }
@@ -360,8 +414,8 @@ export function kellyParlay(
 ): KellyResult & { combinedOdds: number; combinedDecimal: number; trueWinProb: number } {
   if (legs.length === 0) throw new RangeError('legs array must not be empty');
   legs.forEach((leg) => {
-    if (leg.probability <= 0 || leg.probability >= 1) {
-      throw new RangeError('probability must be between 0 and 1 exclusive for every leg');
+    if (!Number.isFinite(leg.probability) || leg.probability <= 0 || leg.probability >= 1) {
+      throw new RangeError('probability must be a finite number between 0 and 1 exclusive for every leg');
     }
   });
 
@@ -392,12 +446,19 @@ export function expectedValue(
   americanOdds: number,
   stake = 1
 ): { ev: number; evPercent: number; breakEvenProb: number } {
-  const b = toDecimal(americanOdds) - 1;
+  if (!Number.isFinite(winProbability) || winProbability < 0 || winProbability > 1) {
+    throw new RangeError('winProbability must be a finite number between 0 and 1 inclusive');
+  }
+  if (!Number.isFinite(stake) || stake <= 0) {
+    throw new RangeError('stake must be a positive finite number');
+  }
+  const decimal = toDecimal(americanOdds);
+  const b = decimal - 1;
   const ev = stake * (b * winProbability - (1 - winProbability));
   return {
     ev: Math.round(ev * 100) / 100,
     evPercent: Math.round((ev / stake) * 10000) / 100,
-    breakEvenProb: Math.round((1 / toDecimal(americanOdds)) * 10000) / 10000,
+    breakEvenProb: Math.round((1 / decimal) * 10000) / 10000,
   };
 }
 
@@ -489,18 +550,15 @@ export function clv(openLine: number, closeLine: number): CLVResult {
   };
 }
 
-/**
- * Summarize CLV across a set of bets.
- */
-export function clvSummary(
-  bets: Array<{ openLine: number; closeLine: number }>
-): {
+export interface CLVSummary {
   avgCLV: number;
   beatCloseRate: number;
   verdict: string;
   totalBets: number;
-} {
-  if (bets.length === 0) {
+}
+
+function summarizeClvResults(results: CLVResult[]): CLVSummary {
+  if (results.length === 0) {
     return {
       avgCLV: 0,
       beatCloseRate: 0,
@@ -509,7 +567,6 @@ export function clvSummary(
     };
   }
 
-  const results = bets.map((b) => clv(b.openLine, b.closeLine));
   const avgCLV = results.reduce((sum, r) => sum + r.clvPercent, 0) / results.length;
   const beatCloseRate = results.filter((r) => r.beatClose).length / results.length;
 
@@ -523,8 +580,60 @@ export function clvSummary(
     avgCLV: Math.round(avgCLV * 100) / 100,
     beatCloseRate: Math.round(beatCloseRate * 10000) / 10000,
     verdict,
-    totalBets: bets.length,
+    totalBets: results.length,
   };
+}
+
+/**
+ * Summarize CLV across a set of bets.
+ */
+export function clvSummary(
+  bets: Array<{ openLine: number; closeLine: number }>
+): CLVSummary {
+  return summarizeClvResults(bets.map((b) => clv(b.openLine, b.closeLine)));
+}
+
+export interface RollingCLVWindow extends CLVSummary {
+  /** Inclusive start index into the original bets array */
+  startIndex: number;
+  /** Inclusive end index into the original bets array */
+  endIndex: number;
+}
+
+/**
+ * Rolling-window CLV summary — one {@link CLVSummary} per contiguous window.
+ *
+ * Useful for spotting whether line-shopping edge is improving or eroding over
+ * a season without waiting for the full sample.
+ *
+ * @param bets       Chronological open/close lines
+ * @param windowSize Number of bets per window (must be ≥ 1)
+ * @returns One entry per complete window; empty array if `bets.length < windowSize`
+ *
+ * @example
+ * rollingClvSummary(seasonBets, 20);
+ * // → [{ startIndex: 0, endIndex: 19, avgCLV: 0.8, ... }, ...]
+ */
+export function rollingClvSummary(
+  bets: Array<{ openLine: number; closeLine: number }>,
+  windowSize: number
+): RollingCLVWindow[] {
+  if (!Number.isInteger(windowSize) || windowSize < 1) {
+    throw new RangeError('windowSize must be a positive integer');
+  }
+  if (bets.length < windowSize) return [];
+
+  const windows: RollingCLVWindow[] = [];
+  for (let start = 0; start <= bets.length - windowSize; start++) {
+    const slice = bets.slice(start, start + windowSize);
+    const summary = clvSummary(slice);
+    windows.push({
+      ...summary,
+      startIndex: start,
+      endIndex: start + windowSize - 1,
+    });
+  }
+  return windows;
 }
 
 // ─── Bankroll Tracking ────────────────────────────────────────────────────────
@@ -533,6 +642,13 @@ export function clvSummary(
  * Calculate P&L for a single bet result.
  */
 export function betPnL(stake: number, americanOdds: number, result: 'win' | 'loss' | 'push'): BetResult {
+  if (!Number.isFinite(stake) || stake <= 0) {
+    throw new RangeError('stake must be a positive finite number');
+  }
+  if (result !== 'win' && result !== 'loss' && result !== 'push') {
+    throw new RangeError("result must be 'win', 'loss', or 'push'");
+  }
+
   let pnl: number;
   if (result === 'win') {
     pnl = stake * (toDecimal(americanOdds) - 1);
@@ -679,6 +795,8 @@ export function arbitrage(oddsA: number, oddsB: number, totalStake = 1000): Arbi
 export function parlayAnalysis(
   legs: Array<{ americanOdds: number; oppOdds?: number }>
 ): ParlayResult {
+  if (legs.length === 0) throw new RangeError('legs array must not be empty');
+
   // Combined decimal odds
   const combinedDecimal = legs.reduce((acc, leg) => acc * toDecimal(leg.americanOdds), 1);
   const combinedOdds = toAmerican(combinedDecimal);
@@ -760,8 +878,8 @@ export function simulateGrowth(
   kellyMultiplier = 0.5,
   seed?: number
 ): SimulationResult {
-  if (winProbability <= 0 || winProbability >= 1) {
-    throw new RangeError('winProbability must be between 0 and 1 exclusive');
+  if (!Number.isFinite(winProbability) || winProbability <= 0 || winProbability >= 1) {
+    throw new RangeError('winProbability must be a finite number between 0 and 1 exclusive');
   }
   if (!Number.isFinite(americanOdds) || americanOdds === 0) {
     throw new RangeError('americanOdds must be a finite non-zero number');
@@ -975,7 +1093,8 @@ export interface DutchResult {
 function probToAmerican(p: number): number {
   if (p <= 0) return 10000;
   if (p >= 1) return -10000;
-  if (p >= 0.5) return Math.round((-p / (1 - p)) * 100);
+  // Exactly 0.5 → +100 (even money); favorites use the negative form
+  if (p > 0.5) return Math.round((-p / (1 - p)) * 100);
   return Math.round(((1 - p) / p) * 100);
 }
 
@@ -1137,14 +1256,14 @@ export function kellyGrowthRate(
   americanOdds: number,
   fraction: number
 ): GrowthRateResult {
-  if (winProbability <= 0 || winProbability >= 1) {
-    throw new RangeError('winProbability must be between 0 and 1 exclusive');
+  if (!Number.isFinite(winProbability) || winProbability <= 0 || winProbability >= 1) {
+    throw new RangeError('winProbability must be a finite number between 0 and 1 exclusive');
   }
   if (!Number.isFinite(americanOdds) || americanOdds === 0) {
     throw new RangeError('americanOdds must be a finite non-zero number');
   }
-  if (fraction < 0 || fraction >= 1) {
-    throw new RangeError('fraction must be in [0, 1)');
+  if (!Number.isFinite(fraction) || fraction < 0 || fraction >= 1) {
+    throw new RangeError('fraction must be a finite number in [0, 1)');
   }
 
   const b = toDecimal(americanOdds) - 1;

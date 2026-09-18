@@ -35,7 +35,7 @@ pnpm add @ianalloway/kelly-js
 
 Package page: [npmjs.com/package/@ianalloway/kelly-js](https://www.npmjs.com/package/@ianalloway/kelly-js)
 
-> **Version note:** Git `main` may already be at **1.0.1** while the npm registry `latest` tag is still **1.0.0** until a Trusted Publisher / `NPM_TOKEN` publish succeeds. The npm version badge above tracks the registry, not the repo tag.
+> **Version note:** Git `main` may already be ahead of the npm registry `latest` tag until a Trusted Publisher / `NPM_TOKEN` publish succeeds. The npm version badge above tracks the registry, not the repo tag.
 
 `dist/` is gitignored; a `prepare` script runs `tsc` on install so the package entrypoints resolve. From a checkout: `npm install && npm run build`.
 
@@ -68,9 +68,10 @@ kellyParlay([
 
 ```ts
 impliedProb(american)
+fromImpliedProb(probability)   // inverse of impliedProb (integer-rounded American)
 toDecimal(american)
 toAmerican(decimal)
-convertOdds(american)
+convertOdds(american, oppositeOdds?)  // pass opposite side for real noVigProbability
 removeVig(side1, side2)
 ```
 
@@ -93,6 +94,7 @@ implied for a 5% EV). Use `stakeForTargetProfit` to size a bet to a dollar targe
 ```ts
 clv(openLine, closeLine)
 clvSummary(bets)
+rollingClvSummary(bets, windowSize)  // contiguous window summaries over a season
 ```
 
 ### Bankroll tracking
@@ -202,7 +204,7 @@ Auth options (either works):
 1. **Trusted Publisher (preferred)** — on npmjs.com package Settings → Trusted Publisher → GitHub Actions, set owner `ianalloway`, repo `kelly-js`, workflow `publish.yml` (OIDC `id-token` is already granted).
 2. **`NPM_TOKEN`** — optional GitHub Actions secret with automation-scope access; leave it empty when using Trusted Publisher.
 
-Until that publish succeeds, install from npm may still resolve **1.0.0** even though `main` carries **1.0.1**.
+Until that publish succeeds, install from npm may still resolve an older patch than `main` carries.
 
 ## Links
 
