@@ -5,9 +5,11 @@ import {
   arbitrage,
   bankrollStats,
   clvSummary,
+  rollingClvSummary,
   betPnL,
   kellyPortfolio,
   impliedProb,
+  fromImpliedProb,
   clv,
   parlayAnalysis,
   removeVig,
@@ -74,6 +76,16 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
 
     it('throws on negative probability', () => {
       expect(() => kelly(-0.5, -110)).toThrow(RangeError);
+    });
+
+    it('throws on NaN or non-finite probability', () => {
+      expect(() => kelly(Number.NaN, -110)).toThrow(RangeError);
+      expect(() => kelly(Number.POSITIVE_INFINITY, -110)).toThrow(RangeError);
+    });
+
+    it('throws on zero or non-finite american odds', () => {
+      expect(() => kelly(0.55, 0)).toThrow(RangeError);
+      expect(() => kelly(0.55, Number.NaN)).toThrow(RangeError);
     });
 
     it('handles low-probability, high-odds scenarios', () => {
@@ -228,6 +240,11 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
       expect(() => toAmerican(0)).toThrow(RangeError);
       expect(() => toAmerican(-5)).toThrow(RangeError);
     });
+
+    it('throws on non-finite decimal', () => {
+      expect(() => toAmerican(Number.NaN)).toThrow(RangeError);
+      expect(() => toAmerican(Number.POSITIVE_INFINITY)).toThrow(RangeError);
+    });
   });
 
   describe('impliedProb()', () => {
@@ -248,6 +265,32 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
       expect(prob2).toBeGreaterThan(0);
       expect(prob2).toBeLessThan(1);
     });
+
+    it('throws on zero or non-finite odds', () => {
+      expect(() => impliedProb(0)).toThrow(RangeError);
+      expect(() => impliedProb(Number.NaN)).toThrow(RangeError);
+      expect(() => impliedProb(Number.POSITIVE_INFINITY)).toThrow(RangeError);
+    });
+  });
+
+  describe('fromImpliedProb()', () => {
+    it('round-trips common American lines via impliedProb', () => {
+      for (const odds of [-200, -110, 100, 150, 200]) {
+        const back = fromImpliedProb(impliedProb(odds));
+        expect(back).toBe(odds);
+      }
+    });
+
+    it('converts break-even and underdog probs', () => {
+      expect(fromImpliedProb(0.5)).toBe(100);
+      expect(fromImpliedProb(0.4)).toBe(150);
+    });
+
+    it('throws on probabilities outside (0, 1)', () => {
+      expect(() => fromImpliedProb(0)).toThrow(RangeError);
+      expect(() => fromImpliedProb(1)).toThrow(RangeError);
+      expect(() => fromImpliedProb(Number.NaN)).toThrow(RangeError);
+    });
   });
 
   describe('convertOdds()', () => {
@@ -257,6 +300,7 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
       expect(result.decimal).toBeCloseTo(1.909, 2);
       expect(result.fractional).toBe('10/11');
       expect(result.impliedProbability).toBeCloseTo(0.5238, 2);
+      expect(result.noVigProbability).toBeUndefined();
     });
 
     it('handles positive American odds', () => {
@@ -266,9 +310,14 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
       expect(result.impliedProbability).toBe(0.5);
     });
 
-    it('includes noVigProbability when vigRemoval=true', () => {
-      const result = convertOdds(-110, true);
-      expect(result.noVigProbability).toBeDefined();
+    it('includes real no-vig probability when oppositeOdds is provided', () => {
+      const result = convertOdds(-110, -110);
+      expect(result.noVigProbability).toBe(0.5);
+      expect(result.noVigProbability).not.toBe(result.impliedProbability);
+    });
+
+    it('rejects the old vigRemoval boolean (was a false no-vig copy)', () => {
+      expect(() => convertOdds(-110, true)).toThrow(TypeError);
     });
   });
 
@@ -284,6 +333,11 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
       const result = removeVig(-110, +100);
       expect(result.prob1 + result.prob2).toBeCloseTo(1, 4);
       expect(result.vig).toBeGreaterThan(0);
+    });
+
+    it('throws when either side has invalid odds', () => {
+      expect(() => removeVig(0, -110)).toThrow(RangeError);
+      expect(() => removeVig(-110, Number.NaN)).toThrow(RangeError);
     });
   });
 
@@ -478,6 +532,12 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
       const result150 = betPnL(100, 150, 'win');
       expect(result150.pnl).toBeGreaterThan(result110.pnl);
     });
+
+    it('throws on zero, negative, or non-finite stake (avoids NaN ROI)', () => {
+      expect(() => betPnL(0, -110, 'win')).toThrow(RangeError);
+      expect(() => betPnL(-50, -110, 'loss')).toThrow(RangeError);
+      expect(() => betPnL(Number.NaN, -110, 'win')).toThrow(RangeError);
+    });
   });
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -532,6 +592,43 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
       expect(result.totalBets).toBe(3);
       expect(result.avgCLV).toBeGreaterThan(0);
     });
+
+    it('returns finite zeros for an empty series (not NaN)', () => {
+      const result = clvSummary([]);
+      expect(Number.isFinite(result.avgCLV)).toBe(true);
+      expect(result.avgCLV).toBe(0);
+      expect(result.beatCloseRate).toBe(0);
+    });
+  });
+
+  describe('rollingClvSummary()', () => {
+    const season = [
+      { openLine: -108, closeLine: -115 }, // beat
+      { openLine: -115, closeLine: -108 }, // miss
+      { openLine: -105, closeLine: -120 }, // beat
+      { openLine: -110, closeLine: -110 }, // flat
+    ];
+
+    it('returns one window summary per contiguous slice', () => {
+      const windows = rollingClvSummary(season, 2);
+      expect(windows).toHaveLength(3);
+      expect(windows[0].startIndex).toBe(0);
+      expect(windows[0].endIndex).toBe(1);
+      expect(windows[0].totalBets).toBe(2);
+      expect(windows[0].beatCloseRate).toBeCloseTo(0.5, 4);
+      expect(windows[2].startIndex).toBe(2);
+      expect(windows[2].endIndex).toBe(3);
+    });
+
+    it('returns empty array when series is shorter than the window', () => {
+      expect(rollingClvSummary(season, 10)).toEqual([]);
+      expect(rollingClvSummary([], 5)).toEqual([]);
+    });
+
+    it('throws on invalid windowSize', () => {
+      expect(() => rollingClvSummary(season, 0)).toThrow(RangeError);
+      expect(() => rollingClvSummary(season, 1.5)).toThrow(RangeError);
+    });
   });
 
   describe('clv()', () => {
@@ -560,6 +657,11 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
     it('assigns neutral verdict for near-even CLV', () => {
       const result = clv(-110, -111);
       expect(result.verdict).toBe('neutral');
+    });
+
+    it('throws on zero or non-finite lines', () => {
+      expect(() => clv(0, -110)).toThrow(RangeError);
+      expect(() => clv(-110, Number.NaN)).toThrow(RangeError);
     });
   });
 
@@ -631,6 +733,15 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
       const result = expectedValue(0.60, -110);
       expect(typeof result.ev).toBe('number');
       expect(result.evPercent).toBeCloseTo(result.ev * 100, 0);
+    });
+
+    it('throws on zero/negative stake (avoids Inf/NaN evPercent)', () => {
+      expect(() => expectedValue(0.55, -110, 0)).toThrow(RangeError);
+      expect(() => expectedValue(0.55, -110, -10)).toThrow(RangeError);
+    });
+
+    it('throws on non-finite winProbability', () => {
+      expect(() => expectedValue(Number.NaN, -110)).toThrow(RangeError);
     });
   });
 
@@ -734,6 +845,10 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
       ]);
       expect(typeof result.hasEdge).toBe('boolean');
       expect(result.ev100).toBeDefined();
+    });
+
+    it('throws on an empty legs array', () => {
+      expect(() => parlayAnalysis([])).toThrow(RangeError);
     });
   });
 
@@ -999,11 +1114,11 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
       expect(r.prob1).toBeGreaterThan(0.5);
     });
 
-    it('fairOdds1 and fairOdds2 are opposite in sign for close markets', () => {
+    it('fairOdds are even money (+100) for a balanced -110/-110 market', () => {
       const r = marketConsensus([{ book: 'X', side1Odds: -110, side2Odds: -110 }]);
-      // 50/50 market → both sides should be around +/-100
-      expect(Math.sign(r.fairOdds1)).toBe(-1);
-      expect(Math.sign(r.fairOdds2)).toBe(-1);
+      // De-vigged 50/50 → +100 on both sides (American even-money convention)
+      expect(r.fairOdds1).toBe(100);
+      expect(r.fairOdds2).toBe(100);
     });
 
     it('disagreement is 0 when all books show identical de-vigged probs', () => {
@@ -1113,6 +1228,13 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
     it('clamps result to 1 when multiplier would exceed 1', () => {
       const result = optimalFractionalKelly(0.02, 0.01, 0.3);
       expect(result).toBeLessThanOrEqual(1);
+    });
+
+    it('throws on non-positive variance or invalid drawdown bounds', () => {
+      expect(() => optimalFractionalKelly(0.05, 0, 0.5)).toThrow(RangeError);
+      expect(() => optimalFractionalKelly(0.05, 0.01, 1)).toThrow(RangeError);
+      expect(() => optimalFractionalKelly(0.05, 0.01, 0.5, 0)).toThrow(RangeError);
+      expect(() => optimalFractionalKelly(0.05, Number.NaN, 0.5)).toThrow(RangeError);
     });
   });
 
