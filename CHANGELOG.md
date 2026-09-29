@@ -5,6 +5,23 @@ Notable changes to `@ianalloway/kelly-js`. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+
+- `simultaneousKelly(bets, opts?)`: Kelly sizing for independent bets placed at
+  the same time. Maximizes expected log growth over all 2^n outcome combinations
+  (exact for `n ≤ 12`); larger slates use a documented independent-Kelly +
+  proportional-scale approximation. Returns per-bet fractions that never sum
+  above `1` (or `opts.maxTotal`), with optional fractional-Kelly `fraction`.
+  Inputs use decimal odds and win probabilities.
+- `mutuallyExclusiveKelly(outcomes, opts?)`: Kelly sizing for several outcomes
+  of the same event (futures, race markets) via the Smoczynski/Tomkins
+  optimal-set algorithm. Same decimal-odds inputs, `maxTotal` / `fraction` opts,
+  and bankroll `dollars()` helper.
+- Exported types: `SimultaneousBetInput`, `SimultaneousKellyOpts`,
+  `SimultaneousKellyResult`, `MutuallyExclusiveOutcomeInput`,
+  `MutuallyExclusiveKellyOpts`, `MutuallyExclusiveKellyResult`, and
+  `SIMULTANEOUS_KELLY_EXACT_MAX`.
+
 ## [1.1.0] - 2026-09-29
 
 The `1.0.1` and `1.0.2` version bumps on `main` were never tagged or published

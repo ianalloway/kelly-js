@@ -64,6 +64,62 @@ kellyParlay([
 // { fraction: ..., combinedOdds: ..., combinedDecimal: ..., trueWinProb: 0.33, ... }
 ```
 
+### Simultaneous & mutually exclusive Kelly
+
+When several bets are live at once, independent single-bet Kelly overstates total
+exposure. These helpers size a **portfolio** under a shared bankroll cap. Inputs
+use **decimal odds** and win probabilities (convert with `toDecimal` if you start
+from American lines).
+
+```ts
+simultaneousKelly(bets, opts?)
+mutuallyExclusiveKelly(outcomes, opts?)
+```
+
+**Independent concurrent bets** — maximize expected log growth over all 2^n
+win/loss combinations. Exact for `n ≤ 12`; for larger slates falls back to
+independent Kelly fractions scaled onto `maxTotal` (documented approximation that
+ignores joint cross terms). Fractions never sum above `1` (or `opts.maxTotal`).
+
+```ts
+import { simultaneousKelly, toDecimal } from '@ianalloway/kelly-js';
+
+const slate = simultaneousKelly(
+  [
+    { probability: 0.55, decimalOdds: toDecimal(-110), label: 'Lakers ML' },
+    { probability: 0.60, decimalOdds: 1.90, label: 'Over 220.5' },
+  ],
+  { fraction: 0.5, maxTotal: 0.25 } // half-Kelly, 25% book cap
+);
+
+slate.fractions;      // e.g. [0.04, 0.05]
+slate.totalFraction;  // ≤ 0.25
+slate.method;         // 'exact' | 'approximation'
+slate.dollars(1000);  // per-bet stakes
+```
+
+**Mutually exclusive outcomes** (futures / same-event multi-bet) — Smoczynski &
+Tomkins optimal-set algorithm: sort by expected revenue `p × decimalOdds`, grow
+the set while revenue exceeds the reserve rate, then
+`f_i = p_i − R(S) / decimalOdds_i`. Probabilities must sum to ≤ 1.
+
+```ts
+import { mutuallyExclusiveKelly } from '@ianalloway/kelly-js';
+
+const futures = mutuallyExclusiveKelly([
+  { probability: 0.40, decimalOdds: 3.0, label: 'Team A' },
+  { probability: 0.25, decimalOdds: 5.0, label: 'Team B' },
+  { probability: 0.10, decimalOdds: 15.0, label: 'Team C' },
+]);
+
+futures.fractions;    // stakes on A/B/C (zeros outside the optimal set)
+futures.optimalSet;   // indices included in the optimal set
+futures.reserveRate;  // R(S) unallocated wealth share
+```
+
+A single +EV input to either function matches plain `kelly()` (same probability
+and equivalent decimal odds). No positive-edge inputs → all zeros.
+
 ### Odds conversion
 
 ```ts
@@ -165,6 +221,8 @@ nothing here needs a separate install.
 
 ```ts
 kellyPortfolio(bets, maxExposure?)      // size several simultaneous Kelly bets under one exposure cap
+simultaneousKelly(bets, opts?)          // independent concurrent bets — exact log-growth (n≤12) or scaled approx
+mutuallyExclusiveKelly(outcomes, opts?) // same-event / futures — Smoczynski–Tomkins optimal set
 optimalFractionalKelly(edge, variance, maxDrawdown, riskOfDrawdown?)
 kellyGrowthRate(winProbability, americanOdds, fraction) // compare growth rate at any staking fraction
 parlayAnalysis(legs)                    // true EV/win prob for a multi-leg parlay
@@ -184,6 +242,8 @@ This is a compact, reusable package that turns betting math into something easy 
 ## Math notes
 
 - Kelly formula: `f* = (bp - q) / b`
+- Simultaneous independent Kelly maximizes `Σ_ω P(ω) ln(1 + Σ_i f_i · payoff_i(ω))` over the 2^n lattice
+- Mutually exclusive Kelly (Smoczynski/Tomkins): `f_i = p_i − R(S)/o_i` on the optimal set
 - CLV is the gap between your line and the close
 - Full Kelly is optimal in theory; half Kelly is usually the practical default
 
