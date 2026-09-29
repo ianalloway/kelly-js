@@ -1,6 +1,6 @@
 {
   "name": "@ianalloway/kelly-js",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Tree-shakeable TypeScript toolkit for Kelly Criterion, CLV, EV, bankroll stats, odds conversion, line shopping, and hedge sizing \u2014 zero runtime dependencies.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
