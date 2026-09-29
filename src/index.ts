@@ -358,6 +358,481 @@ export function kellyPortfolio(
   }));
 }
 
+// ─── Simultaneous & Mutually Exclusive Kelly ──────────────────────────────────
+
+/** Maximum number of independent bets for exact 2^n enumeration in {@link simultaneousKelly}. */
+export const SIMULTANEOUS_KELLY_EXACT_MAX = 12;
+
+export interface SimultaneousBetInput {
+  /** Estimated win probability in (0, 1) */
+  probability: number;
+  /** Decimal odds (> 1), e.g. 1.91 or 2.5 */
+  decimalOdds: number;
+  /** Optional label for the bet */
+  label?: string;
+}
+
+export interface SimultaneousKellyOpts {
+  /**
+   * Maximum sum of fractions across all bets (default `1`).
+   * Fractions are projected onto this budget during optimization.
+   */
+  maxTotal?: number;
+  /**
+   * Fractional-Kelly multiplier applied after the full-Kelly solve
+   * (default `1`). E.g. `0.5` for half-Kelly. After scaling, the sum is
+   * re-capped at `maxTotal` if needed.
+   */
+  fraction?: number;
+}
+
+export interface SimultaneousKellyResult {
+  /** Optimal bankroll fraction per bet (same order as inputs) */
+  fractions: number[];
+  /** Labels (provided or `Bet i`) */
+  labels: string[];
+  /** Sum of `fractions` */
+  totalFraction: number;
+  /** Expected log growth at the returned (pre-rounding) full-Kelly point, then scaled by `fraction` */
+  logGrowth: number;
+  /**
+   * `'exact'` when n ≤ {@link SIMULTANEOUS_KELLY_EXACT_MAX} (full 2^n enumeration);
+   * `'approximation'` when n is larger (independent Kelly + proportional scale).
+   */
+  method: 'exact' | 'approximation';
+  /** Dollar stakes per bet for a given bankroll */
+  dollars: (bankroll: number) => number[];
+}
+
+export interface MutuallyExclusiveOutcomeInput {
+  /** Estimated win probability in (0, 1) */
+  probability: number;
+  /** Decimal odds (> 1) */
+  decimalOdds: number;
+  /** Optional label for the outcome */
+  label?: string;
+}
+
+export interface MutuallyExclusiveKellyOpts {
+  /** Maximum sum of fractions (default `1`) */
+  maxTotal?: number;
+  /** Fractional-Kelly multiplier (default `1`) */
+  fraction?: number;
+}
+
+export interface MutuallyExclusiveKellyResult {
+  /** Optimal bankroll fraction per outcome (same order as inputs; zero if not in the optimal set) */
+  fractions: number[];
+  /** Labels (provided or `Outcome i`) */
+  labels: string[];
+  /** Sum of `fractions` */
+  totalFraction: number;
+  /** Indices into the input array that form the Smoczynski/Tomkins optimal set */
+  optimalSet: number[];
+  /** Reserve rate R(S) for the optimal set (unallocated wealth share at the optimum) */
+  reserveRate: number;
+  /** Dollar stakes per outcome for a given bankroll */
+  dollars: (bankroll: number) => number[];
+}
+
+/** Round a stake fraction to 4 decimal places (library convention). */
+function roundFraction(n: number): number {
+  return Math.round(n * 10000) / 10000;
+}
+
+/**
+ * Round fractions to 4dp while guaranteeing Σ ≤ maxTotal (shave largest entries if needed).
+ */
+function roundFractionsRespectingCap(fractions: number[], maxTotal: number): number[] {
+  let rounded = fractions.map(roundFraction);
+  let sum = rounded.reduce((s, x) => s + x, 0);
+  if (sum <= maxTotal + 1e-12) return rounded;
+
+  rounded = projectOntoSimplexCap(rounded, maxTotal).map(roundFraction);
+  sum = rounded.reduce((s, x) => s + x, 0);
+
+  // Rounding can still overshoot by a few ULPs — shave the largest stakes
+  while (sum > maxTotal + 1e-12) {
+    let maxIdx = 0;
+    for (let i = 1; i < rounded.length; i++) {
+      if (rounded[i] > rounded[maxIdx]) maxIdx = i;
+    }
+    if (rounded[maxIdx] <= 0) break;
+    rounded[maxIdx] = roundFraction(rounded[maxIdx] - 0.0001);
+    sum = rounded.reduce((s, x) => s + x, 0);
+  }
+  return rounded;
+}
+
+/** Validate a win probability in (0, 1). */
+function assertWinProbability(probability: number, label = 'probability'): void {
+  if (!Number.isFinite(probability) || probability <= 0 || probability >= 1) {
+    throw new RangeError(`${label} must be a finite number between 0 and 1 exclusive`);
+  }
+}
+
+/** Validate decimal odds (> 1). */
+function assertDecimalOdds(decimalOdds: number): void {
+  if (!Number.isFinite(decimalOdds) || decimalOdds <= 1) {
+    throw new RangeError('decimalOdds must be a finite number greater than 1');
+  }
+}
+
+/** Validate shared Kelly portfolio options. */
+function normalizeKellyCapOpts(opts?: { maxTotal?: number; fraction?: number }): {
+  maxTotal: number;
+  fraction: number;
+} {
+  const maxTotal = opts?.maxTotal ?? 1;
+  const fraction = opts?.fraction ?? 1;
+  if (!Number.isFinite(maxTotal) || maxTotal <= 0 || maxTotal > 1) {
+    throw new RangeError('maxTotal must be a finite number in (0, 1]');
+  }
+  if (!Number.isFinite(fraction) || fraction < 0) {
+    throw new RangeError('fraction must be a finite non-negative number');
+  }
+  return { maxTotal, fraction };
+}
+
+/** Standalone Kelly fraction from probability + decimal odds (unrounded). */
+function kellyFractionFromDecimal(probability: number, decimalOdds: number): number {
+  const b = decimalOdds - 1;
+  const q = 1 - probability;
+  return Math.max(0, (b * probability - q) / b);
+}
+
+/**
+ * Project `f` onto { f_i ≥ 0, Σ f_i ≤ maxTotal } via Euclidean projection.
+ */
+function projectOntoSimplexCap(f: number[], maxTotal: number): number[] {
+  const n = f.length;
+  const clamped = f.map((x) => Math.max(0, x));
+  const sum = clamped.reduce((s, x) => s + x, 0);
+  if (sum <= maxTotal) return clamped;
+  // Soft-threshold: find τ such that Σ max(0, f_i − τ) = maxTotal
+  const sorted = [...clamped].sort((a, b) => b - a);
+  let cumsum = 0;
+  let tau = 0;
+  for (let i = 0; i < n; i++) {
+    cumsum += sorted[i];
+    const candidate = (cumsum - maxTotal) / (i + 1);
+    if (i === n - 1 || sorted[i + 1] <= candidate) {
+      tau = candidate;
+      break;
+    }
+  }
+  return clamped.map((x) => Math.max(0, x - tau));
+}
+
+/**
+ * Expected log growth and gradient for independent simultaneous bets over all 2^n masks.
+ * Wealth multiplier for mask ω: 1 − Σ f_i + Σ_{i: win} f_i · decimalOdds_i
+ */
+function simultaneousLogGrowthAndGradient(
+  fractions: number[],
+  probabilities: number[],
+  decimalOdds: number[]
+): { growth: number; gradient: number[] } {
+  const n = fractions.length;
+  const nMasks = 1 << n;
+  const gradient = new Array(n).fill(0);
+  let growth = 0;
+
+  for (let mask = 0; mask < nMasks; mask++) {
+    let p = 1;
+    let wealth = 1;
+    for (let i = 0; i < n; i++) {
+      const win = (mask >> i) & 1;
+      p *= win ? probabilities[i] : 1 - probabilities[i];
+      wealth += win ? fractions[i] * (decimalOdds[i] - 1) : -fractions[i];
+    }
+    if (!(wealth > 0) || !(p > 0)) {
+      // Invalid region (bankrupt) — steep penalty via gradient away from boundary
+      if (!(wealth > 0)) {
+        return { growth: Number.NEGATIVE_INFINITY, gradient: fractions.map((f) => -f - 1) };
+      }
+      continue;
+    }
+    const invW = 1 / wealth;
+    growth += p * Math.log(wealth);
+    for (let i = 0; i < n; i++) {
+      const win = (mask >> i) & 1;
+      const payoff = win ? decimalOdds[i] - 1 : -1;
+      gradient[i] += p * payoff * invW;
+    }
+  }
+  return { growth, gradient };
+}
+
+/**
+ * Exact simultaneous Kelly via projected gradient ascent on expected log growth.
+ */
+function exactSimultaneousKelly(
+  probabilities: number[],
+  decimalOdds: number[],
+  maxTotal: number
+): { fractions: number[]; logGrowth: number } {
+  const n = probabilities.length;
+  // Warm start: independent Kelly, projected onto the budget
+  let f = projectOntoSimplexCap(
+    probabilities.map((p, i) => kellyFractionFromDecimal(p, decimalOdds[i])),
+    maxTotal
+  );
+
+  let step = 0.2;
+  let { growth: bestGrowth } = simultaneousLogGrowthAndGradient(f, probabilities, decimalOdds);
+  if (!Number.isFinite(bestGrowth)) {
+    f = new Array(n).fill(0);
+    bestGrowth = 0;
+  }
+
+  for (let iter = 0; iter < 2000; iter++) {
+    const { gradient } = simultaneousLogGrowthAndGradient(f, probabilities, decimalOdds);
+    let improved = false;
+    let trialStep = step;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const candidate = projectOntoSimplexCap(
+        f.map((x, i) => x + trialStep * gradient[i]),
+        maxTotal
+      );
+      const { growth } = simultaneousLogGrowthAndGradient(candidate, probabilities, decimalOdds);
+      if (Number.isFinite(growth) && growth >= bestGrowth - 1e-15) {
+        const delta = growth - bestGrowth;
+        f = candidate;
+        bestGrowth = growth;
+        improved = delta > 1e-14;
+        step = Math.min(1, trialStep * 1.2);
+        break;
+      }
+      trialStep *= 0.5;
+    }
+    if (!improved) {
+      // Check projected gradient norm for stationarity
+      const { gradient: g } = simultaneousLogGrowthAndGradient(f, probabilities, decimalOdds);
+      const projected = projectOntoSimplexCap(
+        f.map((x, i) => x + g[i]),
+        maxTotal
+      );
+      let move = 0;
+      for (let i = 0; i < n; i++) move += Math.abs(projected[i] - f[i]);
+      if (move < 1e-12) break;
+      step = Math.max(1e-6, step * 0.5);
+    }
+  }
+
+  return { fractions: f, logGrowth: bestGrowth };
+}
+
+/**
+ * Large-n approximation: independent Kelly fractions, scaled to respect `maxTotal`.
+ * Ignores simultaneous cross terms in the joint log-wealth objective.
+ * `logGrowth` is left at 0 — full lattice evaluation is intractable at this n.
+ */
+function approximateSimultaneousKelly(
+  probabilities: number[],
+  decimalOdds: number[],
+  maxTotal: number
+): { fractions: number[]; logGrowth: number } {
+  const raw = probabilities.map((p, i) => kellyFractionFromDecimal(p, decimalOdds[i]));
+  return { fractions: projectOntoSimplexCap(raw, maxTotal), logGrowth: 0 };
+}
+
+/**
+ * Simultaneous Kelly sizing for independent bets placed at the same time.
+ *
+ * Maximizes expected log bankroll growth over all 2^n win/loss combinations
+ * when each bet is independent. Returned fractions never sum above `opts.maxTotal`
+ * (default `1`).
+ *
+ * **Exact vs approximation:** for `n ≤ 12` the objective is optimized exactly over
+ * the full outcome lattice (projected gradient ascent). For `n > 12`, enumerating
+ * 2^n states is intractable, so the function falls back to computing each bet's
+ * standalone Kelly fraction and scaling the vector proportionally onto the
+ * `maxTotal` budget. That approximation ignores cross terms in the joint
+ * log-wealth objective — prefer exact for small slates.
+ *
+ * @param bets Array of `{ probability, decimalOdds, label? }`
+ * @param opts Optional `maxTotal` (default 1) and fractional-Kelly `fraction` (default 1)
+ *
+ * @example
+ * simultaneousKelly([
+ *   { probability: 0.55, decimalOdds: 2.1, label: 'Game A' },
+ *   { probability: 0.60, decimalOdds: 1.9, label: 'Game B' },
+ * ], { fraction: 0.5 });
+ */
+export function simultaneousKelly(
+  bets: SimultaneousBetInput[],
+  opts?: SimultaneousKellyOpts
+): SimultaneousKellyResult {
+  if (bets.length === 0) throw new RangeError('bets array must not be empty');
+  const { maxTotal, fraction: kellyMult } = normalizeKellyCapOpts(opts);
+
+  const probabilities: number[] = [];
+  const decimalOdds: number[] = [];
+  const labels: string[] = [];
+
+  bets.forEach((bet, i) => {
+    assertWinProbability(bet.probability);
+    assertDecimalOdds(bet.decimalOdds);
+    probabilities.push(bet.probability);
+    decimalOdds.push(bet.decimalOdds);
+    labels.push(bet.label ?? `Bet ${i + 1}`);
+  });
+
+  const n = bets.length;
+  const method: 'exact' | 'approximation' =
+    n <= SIMULTANEOUS_KELLY_EXACT_MAX ? 'exact' : 'approximation';
+
+  const solved =
+    method === 'exact'
+      ? exactSimultaneousKelly(probabilities, decimalOdds, maxTotal)
+      : approximateSimultaneousKelly(probabilities, decimalOdds, maxTotal);
+
+  // Apply fractional Kelly, then re-cap at maxTotal
+  let fractions = projectOntoSimplexCap(
+    solved.fractions.map((f) => f * kellyMult),
+    maxTotal
+  );
+
+  // Zero out tiny numerical noise
+  fractions = fractions.map((f) => (f < 1e-12 ? 0 : f));
+
+  const finalFractions = roundFractionsRespectingCap(fractions, maxTotal);
+  const totalFraction = roundFraction(finalFractions.reduce((s, x) => s + x, 0));
+
+  // Log growth at the fractional point (exact path only when n is small enough)
+  let logGrowth = 0;
+  if (method === 'exact') {
+    const { growth } = simultaneousLogGrowthAndGradient(finalFractions, probabilities, decimalOdds);
+    logGrowth = Number.isFinite(growth) ? Math.round(growth * 1e8) / 1e8 : 0;
+  }
+
+  return {
+    fractions: finalFractions,
+    labels,
+    totalFraction,
+    logGrowth,
+    method,
+    dollars: (bankroll: number) => {
+      if (!Number.isFinite(bankroll) || bankroll < 0) {
+        throw new RangeError('bankroll must be a finite non-negative number');
+      }
+      return finalFractions.map((f) => Math.round(bankroll * f * 100) / 100);
+    },
+  };
+}
+
+/**
+ * Mutually exclusive Kelly sizing (Smoczynski / Tomkins optimal-set algorithm).
+ *
+ * For betting several outcomes of the **same** event (futures, horse races, etc.)
+ * where exactly one outcome can win. Sorts by expected revenue rate
+ * `er_i = probability × decimalOdds`, grows the optimal set while
+ * `er_k > R(S)`, then sets
+ * `f_i = p_i − R(S) / decimalOdds_i` for members of the set (else 0).
+ *
+ * Probabilities across inputs must sum to ≤ 1 (residual mass is the “field”
+ * you are not betting). A single +EV outcome reduces to classic Kelly.
+ *
+ * @param outcomes Array of `{ probability, decimalOdds, label? }`
+ * @param opts Optional `maxTotal` (default 1) and fractional-Kelly `fraction` (default 1)
+ *
+ * @example
+ * mutuallyExclusiveKelly([
+ *   { probability: 0.40, decimalOdds: 3.0, label: 'Team A' },
+ *   { probability: 0.25, decimalOdds: 5.0, label: 'Team B' },
+ *   { probability: 0.10, decimalOdds: 15.0, label: 'Team C' },
+ * ]);
+ */
+export function mutuallyExclusiveKelly(
+  outcomes: MutuallyExclusiveOutcomeInput[],
+  opts?: MutuallyExclusiveKellyOpts
+): MutuallyExclusiveKellyResult {
+  if (outcomes.length === 0) throw new RangeError('outcomes array must not be empty');
+  const { maxTotal, fraction: kellyMult } = normalizeKellyCapOpts(opts);
+
+  const probabilities: number[] = [];
+  const decimalOdds: number[] = [];
+  const labels: string[] = [];
+
+  outcomes.forEach((o, i) => {
+    assertWinProbability(o.probability);
+    assertDecimalOdds(o.decimalOdds);
+    probabilities.push(o.probability);
+    decimalOdds.push(o.decimalOdds);
+    labels.push(o.label ?? `Outcome ${i + 1}`);
+  });
+
+  const probSum = probabilities.reduce((s, p) => s + p, 0);
+  if (probSum > 1 + 1e-12) {
+    throw new RangeError('mutually exclusive probabilities must sum to at most 1');
+  }
+
+  // Expected revenue rates er_i = p_i * o_i; sort descending (stable by index)
+  const order = probabilities
+    .map((p, i) => ({ i, er: p * decimalOdds[i] }))
+    .sort((a, b) => b.er - a.er || a.i - b.i);
+
+  const inSet = new Array(outcomes.length).fill(false);
+  let reserveRate = 1; // R(∅) = 1 when D = 1 (fixed-odds)
+  const optimalSet: number[] = [];
+
+  for (const { i, er } of order) {
+    if (er > reserveRate) {
+      inSet[i] = true;
+      optimalSet.push(i);
+      // R(S) = (1 − Σ_{k∈S} p_k) / (1 − Σ_{k∈S} 1/o_k)
+      let sumP = 0;
+      let sumBeta = 0;
+      for (let j = 0; j < outcomes.length; j++) {
+        if (!inSet[j]) continue;
+        sumP += probabilities[j];
+        sumBeta += 1 / decimalOdds[j];
+      }
+      const denom = 1 - sumBeta;
+      if (!(denom > 0)) {
+        // Degenerate book — back out this addition
+        inSet[i] = false;
+        optimalSet.pop();
+        break;
+      }
+      reserveRate = (1 - sumP) / denom;
+    } else {
+      break; // subsequent candidates have even lower er
+    }
+  }
+
+  let fractions = probabilities.map((p, i) => {
+    if (!inSet[i]) return 0;
+    return Math.max(0, p - reserveRate / decimalOdds[i]);
+  });
+
+  // Fractional Kelly + exposure cap
+  fractions = projectOntoSimplexCap(
+    fractions.map((f) => f * kellyMult),
+    maxTotal
+  ).map((f) => (f < 1e-12 ? 0 : f));
+
+  const finalFractions = roundFractionsRespectingCap(fractions, maxTotal);
+
+  // Drop from optimalSet any index that rounded to zero; return in input order
+  const finalOptimalSet = optimalSet.filter((i) => finalFractions[i] > 0).sort((a, b) => a - b);
+
+  return {
+    fractions: finalFractions,
+    labels,
+    totalFraction: roundFraction(finalFractions.reduce((s, x) => s + x, 0)),
+    optimalSet: finalOptimalSet,
+    reserveRate: Math.round(reserveRate * 1e8) / 1e8,
+    dollars: (bankroll: number) => {
+      if (!Number.isFinite(bankroll) || bankroll < 0) {
+        throw new RangeError('bankroll must be a finite non-negative number');
+      }
+      return finalFractions.map((f) => Math.round(bankroll * f * 100) / 100);
+    },
+  };
+}
+
 /**
  * Calculate the optimal fractional Kelly multiplier to maximize growth 
  * given a specific constraint on the probability of a drawdown.

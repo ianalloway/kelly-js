@@ -28,6 +28,9 @@ import {
   optimalFractionalKelly,
   minEdge,
   stakeForTargetProfit,
+  simultaneousKelly,
+  mutuallyExclusiveKelly,
+  SIMULTANEOUS_KELLY_EXACT_MAX,
 } from './index';
 
 describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
@@ -705,6 +708,251 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
       ]);
       const dollars = portfolio[0].dollars(1000);
       expect(dollars).toBeGreaterThan(0);
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // simultaneousKelly() — independent concurrent bets
+  // ────────────────────────────────────────────────────────────────────────────
+
+  describe('simultaneousKelly()', () => {
+    it('matches plain kelly() for a single bet', () => {
+      const single = kelly(0.6, 100); // +100 → decimal 2.0
+      const result = simultaneousKelly([{ probability: 0.6, decimalOdds: 2.0 }]);
+      expect(result.fractions).toHaveLength(1);
+      expect(result.fractions[0]).toBe(single.fraction);
+      expect(result.method).toBe('exact');
+      expect(result.totalFraction).toBe(single.fraction);
+    });
+
+    it('matches kelly() at -110 / decimal odds for one bet', () => {
+      const american = -110;
+      const single = kelly(0.58, american);
+      const result = simultaneousKelly([
+        { probability: 0.58, decimalOdds: toDecimal(american) },
+      ]);
+      expect(result.fractions[0]).toBeCloseTo(single.fraction, 3);
+    });
+
+    it('returns all zeros when no bet has positive edge', () => {
+      const result = simultaneousKelly([
+        { probability: 0.5, decimalOdds: 2.0 },
+        { probability: 0.4, decimalOdds: 2.0 },
+        { probability: 0.5238, decimalOdds: toDecimal(-110) },
+      ]);
+      expect(result.fractions.every((f) => f === 0)).toBe(true);
+      expect(result.totalFraction).toBe(0);
+    });
+
+    it('never sums above maxTotal', () => {
+      const result = simultaneousKelly(
+        [
+          { probability: 0.58, decimalOdds: toDecimal(-110) },
+          { probability: 0.62, decimalOdds: 2.1 },
+          { probability: 0.55, decimalOdds: 2.2 },
+        ],
+        { maxTotal: 0.15 }
+      );
+      expect(result.totalFraction).toBeLessThanOrEqual(0.15);
+      expect(result.fractions.reduce((s, f) => s + f, 0)).toBeLessThanOrEqual(0.15);
+    });
+
+    it('never sums above 1 by default', () => {
+      const result = simultaneousKelly([
+        { probability: 0.7, decimalOdds: 1.8 },
+        { probability: 0.65, decimalOdds: 1.9 },
+        { probability: 0.6, decimalOdds: 2.0 },
+      ]);
+      expect(result.totalFraction).toBeLessThanOrEqual(1);
+    });
+
+    it('applies fractional Kelly multiplier', () => {
+      const full = simultaneousKelly([
+        { probability: 0.55, decimalOdds: 2.1 },
+        { probability: 0.6, decimalOdds: 1.9 },
+      ]);
+      const half = simultaneousKelly(
+        [
+          { probability: 0.55, decimalOdds: 2.1 },
+          { probability: 0.6, decimalOdds: 1.9 },
+        ],
+        { fraction: 0.5 }
+      );
+      expect(half.totalFraction).toBeCloseTo(full.totalFraction * 0.5, 3);
+      half.fractions.forEach((f, i) => {
+        expect(f).toBeCloseTo(full.fractions[i] * 0.5, 3);
+      });
+    });
+
+    it('uses exact method for n ≤ SIMULTANEOUS_KELLY_EXACT_MAX', () => {
+      const bets = Array.from({ length: SIMULTANEOUS_KELLY_EXACT_MAX }, () => ({
+        probability: 0.55,
+        decimalOdds: 2.0,
+      }));
+      expect(simultaneousKelly(bets).method).toBe('exact');
+    });
+
+    it('falls back to approximation for n > SIMULTANEOUS_KELLY_EXACT_MAX', () => {
+      const bets = Array.from({ length: SIMULTANEOUS_KELLY_EXACT_MAX + 1 }, () => ({
+        probability: 0.55,
+        decimalOdds: 2.0,
+      }));
+      const result = simultaneousKelly(bets, { maxTotal: 0.5 });
+      expect(result.method).toBe('approximation');
+      expect(result.fractions).toHaveLength(SIMULTANEOUS_KELLY_EXACT_MAX + 1);
+      expect(result.totalFraction).toBeLessThanOrEqual(0.5);
+    });
+
+    it('sizes two independent +EV bets with positive fractions summing under 1', () => {
+      const result = simultaneousKelly([
+        { probability: 0.55, decimalOdds: 2.1, label: 'A' },
+        { probability: 0.6, decimalOdds: 1.9, label: 'B' },
+      ]);
+      expect(result.labels).toEqual(['A', 'B']);
+      expect(result.fractions[0]).toBeGreaterThan(0);
+      expect(result.fractions[1]).toBeGreaterThan(0);
+      expect(result.totalFraction).toBeLessThan(1);
+      expect(result.logGrowth).toBeGreaterThan(0);
+    });
+
+    it('dollars() scales fractions by bankroll', () => {
+      const result = simultaneousKelly([{ probability: 0.6, decimalOdds: 2.0 }]);
+      expect(result.dollars(1000)).toEqual([200]);
+    });
+
+    it('throws on empty bets array', () => {
+      expect(() => simultaneousKelly([])).toThrow(RangeError);
+    });
+
+    it('throws on invalid probability or decimal odds', () => {
+      expect(() =>
+        simultaneousKelly([{ probability: 0, decimalOdds: 2.0 }])
+      ).toThrow(RangeError);
+      expect(() =>
+        simultaneousKelly([{ probability: 0.5, decimalOdds: 1 }])
+      ).toThrow(RangeError);
+      expect(() =>
+        simultaneousKelly([{ probability: 0.5, decimalOdds: 2.0 }], { maxTotal: 0 })
+      ).toThrow(RangeError);
+      expect(() =>
+        simultaneousKelly([{ probability: 0.5, decimalOdds: 2.0 }], { fraction: -1 })
+      ).toThrow(RangeError);
+    });
+
+    it('dollars() throws on negative bankroll', () => {
+      const result = simultaneousKelly([{ probability: 0.6, decimalOdds: 2.0 }]);
+      expect(() => result.dollars(-100)).toThrow(RangeError);
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // mutuallyExclusiveKelly() — Smoczynski/Tomkins optimal set
+  // ────────────────────────────────────────────────────────────────────────────
+
+  describe('mutuallyExclusiveKelly()', () => {
+    it('matches plain kelly() for a single outcome', () => {
+      const single = kelly(0.6, 100);
+      const result = mutuallyExclusiveKelly([{ probability: 0.6, decimalOdds: 2.0 }]);
+      expect(result.fractions[0]).toBe(single.fraction);
+      expect(result.optimalSet).toEqual([0]);
+      expect(result.reserveRate).toBeCloseTo(1 - single.fraction, 4);
+    });
+
+    it('returns all zeros when no outcome has positive edge', () => {
+      const result = mutuallyExclusiveKelly([
+        { probability: 0.4, decimalOdds: 2.0 },
+        { probability: 0.3, decimalOdds: 2.5 },
+        { probability: 0.2, decimalOdds: 3.0 },
+      ]);
+      expect(result.fractions.every((f) => f === 0)).toBe(true);
+      expect(result.optimalSet).toEqual([]);
+      expect(result.totalFraction).toBe(0);
+    });
+
+    it('never sums above maxTotal', () => {
+      const result = mutuallyExclusiveKelly(
+        [
+          { probability: 0.4, decimalOdds: 3.0 },
+          { probability: 0.25, decimalOdds: 5.0 },
+          { probability: 0.1, decimalOdds: 15.0 },
+        ],
+        { maxTotal: 0.2 }
+      );
+      expect(result.totalFraction).toBeLessThanOrEqual(0.2);
+    });
+
+    it('applies fractional Kelly multiplier', () => {
+      const full = mutuallyExclusiveKelly([
+        { probability: 0.4, decimalOdds: 3.0 },
+        { probability: 0.25, decimalOdds: 5.0 },
+      ]);
+      const half = mutuallyExclusiveKelly(
+        [
+          { probability: 0.4, decimalOdds: 3.0 },
+          { probability: 0.25, decimalOdds: 5.0 },
+        ],
+        { fraction: 0.5 }
+      );
+      expect(half.totalFraction).toBeCloseTo(full.totalFraction * 0.5, 3);
+    });
+
+    it('builds a multi-outcome optimal set for futures-style market', () => {
+      const result = mutuallyExclusiveKelly([
+        { probability: 0.4, decimalOdds: 3.0, label: 'A' },
+        { probability: 0.25, decimalOdds: 5.0, label: 'B' },
+        { probability: 0.1, decimalOdds: 15.0, label: 'C' },
+      ]);
+      expect(result.labels).toEqual(['A', 'B', 'C']);
+      expect(result.optimalSet.length).toBeGreaterThan(1);
+      expect(result.fractions.every((f) => f >= 0)).toBe(true);
+      expect(result.totalFraction).toBeGreaterThan(0);
+      expect(result.totalFraction).toBeLessThanOrEqual(1);
+      // Classic closed form check for this known set (all three included):
+      // R = (1 - 0.75) / (1 - (1/3 + 1/5 + 1/15)) = 0.25 / 0.4 = 0.625
+      expect(result.reserveRate).toBeCloseTo(0.625, 4);
+      expect(result.fractions[0]).toBeCloseTo(0.4 - 0.625 / 3, 3);
+      expect(result.fractions[1]).toBeCloseTo(0.25 - 0.625 / 5, 3);
+      expect(result.fractions[2]).toBeCloseTo(0.1 - 0.625 / 15, 3);
+    });
+
+    it('zeros outcomes outside the optimal set while keeping a +EV favourite', () => {
+      // Strong favourite + two dogs with no edge vs reserve
+      const result = mutuallyExclusiveKelly([
+        { probability: 0.7, decimalOdds: 1.6 }, // er = 1.12
+        { probability: 0.15, decimalOdds: 5.0 }, // er = 0.75 < 1 → never enters
+        { probability: 0.1, decimalOdds: 8.0 }, // er = 0.8 < 1 → never enters
+      ]);
+      expect(result.fractions[0]).toBeGreaterThan(0);
+      expect(result.fractions[1]).toBe(0);
+      expect(result.fractions[2]).toBe(0);
+      expect(result.optimalSet).toEqual([0]);
+    });
+
+    it('throws when probabilities sum above 1', () => {
+      expect(() =>
+        mutuallyExclusiveKelly([
+          { probability: 0.6, decimalOdds: 2.0 },
+          { probability: 0.5, decimalOdds: 3.0 },
+        ])
+      ).toThrow(RangeError);
+    });
+
+    it('throws on empty outcomes array', () => {
+      expect(() => mutuallyExclusiveKelly([])).toThrow(RangeError);
+    });
+
+    it('throws on invalid inputs', () => {
+      expect(() =>
+        mutuallyExclusiveKelly([{ probability: 1, decimalOdds: 2.0 }])
+      ).toThrow(RangeError);
+      expect(() =>
+        mutuallyExclusiveKelly([{ probability: 0.5, decimalOdds: 0.9 }])
+      ).toThrow(RangeError);
+    });
+
+    it('dollars() returns per-outcome stakes', () => {
+      const result = mutuallyExclusiveKelly([{ probability: 0.6, decimalOdds: 2.0 }]);
+      expect(result.dollars(1000)).toEqual([200]);
     });
   });
 
