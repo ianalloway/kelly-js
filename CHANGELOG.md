@@ -5,6 +5,14 @@ Notable changes to `@ianalloway/kelly-js`. Format loosely follows
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-29
+
+**Upgrading from 1.0.0?** 1.1.0 was never published to npm, so also read the
+[1.1.0](#110---2026-09-29) notes. Breaking: `convertOdds(american, true)`
+(the old `vigRemoval` boolean) now throws a `TypeError`; pass `oppositeOdds`
+or use `removeVig()`. Several functions also throw `RangeError` on invalid
+input where they used to return `NaN`.
+
 ### Added
 
 - `simultaneousKelly(bets, opts?)`: Kelly sizing for independent bets placed at
@@ -21,6 +29,12 @@ Notable changes to `@ianalloway/kelly-js`. Format loosely follows
   `SimultaneousKellyResult`, `MutuallyExclusiveOutcomeInput`,
   `MutuallyExclusiveKellyOpts`, `MutuallyExclusiveKellyResult`, and
   `SIMULTANEOUS_KELLY_EXACT_MAX`.
+
+### Maintenance
+
+- `publish.yml` now uses npm Trusted Publishing only (Node 24, latest npm,
+  `--provenance`, no `NPM_TOKEN`). The duplicate tag-triggered publish job was
+  removed from `ci.yml`.
 
 ## [1.1.0] - 2026-09-29
 
