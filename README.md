@@ -20,7 +20,9 @@ console.log(k.halfDollars(1000)) // 59
 const c = clv(-108, -115);
 console.log(c.verdict);          // 'positive'
 
-const stats = bankrollStats(myBets, 1000);
+const stats = bankrollStats([
+  { stake: 100, americanOdds: -110, result: 'win' },
+], 1000);
 console.log(stats.roi);
 console.log(stats.maxDrawdown);
 ```
@@ -28,14 +30,16 @@ console.log(stats.maxDrawdown);
 ## Install
 
 ```bash
-npm install @ianalloway/kelly-js
+npm install @ianalloway/kelly-js@^1.2.0
 # or
-pnpm add @ianalloway/kelly-js
+pnpm add @ianalloway/kelly-js@^1.2.0
 ```
 
 Package page: [npmjs.com/package/@ianalloway/kelly-js](https://www.npmjs.com/package/@ianalloway/kelly-js)
 
-> **Version note:** Git `main` may already be ahead of the npm registry `latest` tag until a Trusted Publisher / `NPM_TOKEN` publish succeeds. The npm version badge above tracks the registry, not the repo tag.
+The examples below use features introduced in v1.2.0. The npm version badge
+above tracks the registry release, which can lag behind the Git tag until the
+publish workflow succeeds.
 
 `dist/` is gitignored; a `prepare` script runs `tsc` on install so the package entrypoints resolve. From a checkout: `npm install && npm run build`.
 
@@ -253,18 +257,19 @@ This is a compact, reusable package that turns betting math into something easy 
 npm run lint       # Type-check source and tests
 npm test           # Run Vitest tests
 npm run test:dist  # Rebuild dist/ and verify published exports
+bash scripts/smoke-registry.sh  # Clean-install the exact package version from npm
 ```
 
 ## Publishing
 
 Releases go out via [`.github/workflows/publish.yml`](.github/workflows/publish.yml) on `release` or `workflow_dispatch`.
 
-Auth options (either works):
+Publishing uses npm Trusted Publishing. The package's Trusted Publisher must
+match GitHub owner `ianalloway`, repository `kelly-js`, workflow filename
+`publish.yml`, and permit direct `npm publish`. The workflow has OIDC
+`id-token: write` permission and verifies a clean registry install after upload.
 
-1. **Trusted Publisher (preferred)** — on npmjs.com package Settings → Trusted Publisher → GitHub Actions, set owner `ianalloway`, repo `kelly-js`, workflow `publish.yml` (OIDC `id-token` is already granted).
-2. **`NPM_TOKEN`** — optional GitHub Actions secret with automation-scope access; leave it empty when using Trusted Publisher.
-
-Until that publish succeeds, install from npm may still resolve an older patch than `main` carries.
+Until that publish succeeds, install from npm may still resolve an older version than `main` carries.
 
 ## Links
 

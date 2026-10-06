@@ -36,6 +36,9 @@ jobs:
         id: npm_publish
         run: npm publish --provenance --access public
 
+      - name: Verify clean install from npm
+        run: bash scripts/smoke-registry.sh
+
       - name: Explain publish auth failures
         if: failure() && steps.npm_publish.outcome == 'failure'
         run: |
