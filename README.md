@@ -30,16 +30,18 @@ console.log(stats.maxDrawdown);
 ## Install
 
 ```bash
-npm install @ianalloway/kelly-js@^1.2.0
-# or
-pnpm add @ianalloway/kelly-js@^1.2.0
+npm install @ianalloway/kelly-js  # Published registry version (currently 1.0.0)
+
+# To use the v1.2.0 examples while the npm release is pending:
+npm install github:ianalloway/kelly-js#v1.2.0
 ```
 
 Package page: [npmjs.com/package/@ianalloway/kelly-js](https://www.npmjs.com/package/@ianalloway/kelly-js)
 
-The examples below use features introduced in v1.2.0. The npm version badge
-above tracks the registry release, which can lag behind the Git tag until the
-publish workflow succeeds.
+The examples below use features introduced in v1.2.0. Once that version appears
+on npm, you can install it with `npm install @ianalloway/kelly-js@^1.2.0`.
+The npm version badge above tracks the registry release, which can lag behind
+the Git tag until the publish workflow succeeds.
 
 `dist/` is gitignored; a `prepare` script runs `tsc` on install so the package entrypoints resolve. From a checkout: `npm install && npm run build`.
 
