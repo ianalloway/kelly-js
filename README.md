@@ -241,9 +241,22 @@ ownershipLeverage(projectedPoints, ownershipPct) // DFS contrarian-play score
 stackBonus(qbProj, receiverProj, correlation?)   // DFS game-stack correlation bonus
 ```
 
-## Why this repo matters
+## Portfolio exposure
 
-This is a compact, reusable package that turns betting math into something easy to import and test. It’s a better signal than a giant monorepo because the scope is clean and the API is obvious.
+`kellyPortfolio(bets, maxExposure)` scales the selected bets under one bankroll
+cap. `maxExposure` must be a finite number from `0` to `1`; `0` produces zero
+stakes. Per-bet multipliers must be finite and non-negative. Fractions are
+rounded to four decimal places without exceeding the cap.
+
+Calling each bet's `dollars(bankroll)` with the same bankroll allocates cents
+jointly across the portfolio. The combined stake is rounded to whole cents
+within `bankroll * maxExposure`; spare cents go to the largest fractional
+remainders, with ties resolved in input order. Individual stakes can therefore
+differ from rounding each fraction independently. For example, three identical
+bets with 58% win probability and -110 odds at a 20% cap on $25 allocate
+$1.66, $1.67, and $1.67, for a $5.00 total. Dollar sizing rejects non-finite or
+negative bankrolls and amounts whose cap or combined stakes cannot be
+represented in safe integer cents.
 
 ## Math notes
 

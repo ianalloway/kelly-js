@@ -271,8 +271,8 @@ export function removeVig(
  *
  * @example
  * const k = kelly(0.58, -110);
- * console.log(k.fraction);     // 0.0714
- * console.log(k.halfDollars(1000)); // 35.71
+ * console.log(k.fraction);     // 0.118
+ * console.log(k.halfDollars(1000)); // 59
  */
 export function kelly(winProbability: number, americanOdds: number): KellyResult {
   if (!Number.isFinite(winProbability) || winProbability <= 0 || winProbability >= 1) {
@@ -324,6 +324,7 @@ export function kelly(winProbability: number, americanOdds: number): KellyResult
  * Kelly sizing with multiple simultaneous bets (fractional Kelly portfolio).
  * Scales each bet so the total portfolio exposure stays within max exposure.
  * Supports individual fractional Kelly multipliers per bet.
+ * Dollar stakes for the same bankroll share a cent allocation under the cap.
  */
 export function kellyPortfolio(
   bets: Array<{ 
@@ -334,9 +335,15 @@ export function kellyPortfolio(
   }>,
   maxExposure = 0.25
 ): Array<{ label: string; fraction: number; dollars: (bankroll: number) => number; ev: number }> {
+  if (!Number.isFinite(maxExposure) || maxExposure < 0 || maxExposure > 1) {
+    throw new RangeError('maxExposure must be a finite number in [0, 1]');
+  }
   const results = bets.map((bet, i) => {
     const k = kelly(bet.winProbability, bet.americanOdds);
     const multiplier = bet.multiplier ?? 1;
+    if (!Number.isFinite(multiplier) || multiplier < 0) {
+      throw new RangeError('multiplier must be a finite non-negative number');
+    }
     return {
       label: bet.label ?? `Bet ${i + 1}`,
       ...k,
@@ -345,17 +352,73 @@ export function kellyPortfolio(
   });
 
   const totalFraction = results.reduce((sum, r) => sum + r.fraction, 0);
+  if (!Number.isFinite(totalFraction)) {
+    throw new RangeError('combined portfolio fraction must be finite');
+  }
   const scale = totalFraction > maxExposure ? maxExposure / totalFraction : 1;
+  const fractions = roundFractionsRespectingCap(
+    results.map((r) => r.fraction * scale), maxExposure
+  );
+  let cachedBankroll: number | undefined;
+  let cachedDollars: number[] = [];
 
-  return results.map((r) => ({
+  return results.map((r, i) => ({
     label: r.label,
-    fraction: Math.round(r.fraction * scale * 10000) / 10000,
+    fraction: fractions[i],
     dollars: (bankroll: number) => {
       if (!Number.isFinite(bankroll) || bankroll < 0) throw new RangeError('bankroll must be a finite non-negative number');
-      return Math.round(bankroll * r.fraction * scale * 100) / 100;
+      if (bankroll !== cachedBankroll) {
+        cachedDollars = allocatePortfolioDollars(fractions, bankroll, maxExposure);
+        cachedBankroll = bankroll;
+      }
+      return cachedDollars[i];
     },
     ev: r.ev,
   }));
+}
+
+/** Round the portfolio jointly, assigning spare cents by largest remainder. */
+function allocatePortfolioDollars(fractions: number[], bankroll: number, maxExposure: number): number[] {
+  const maxDollars = bankroll * maxExposure;
+  let centCap = Math.floor(maxDollars * 100);
+  // Recover an exact cent boundary such as 0.58 * 100 === 57.99999999999999.
+  if ((centCap + 1) / 100 <= maxDollars) centCap += 1;
+  const exactCents = fractions.map((fraction) => bankroll * fraction * 100);
+  const total = exactCents.reduce((sum, value) => sum + value, 0);
+  if (!Number.isSafeInteger(centCap) || !Number.isFinite(total) || total > Number.MAX_SAFE_INTEGER) {
+    throw new RangeError('portfolio dollar amounts must fit within safe integer cents');
+  }
+
+  const cents = exactCents.map(Math.floor);
+  const order = exactCents.map((value, index) => ({ index, remainder: value - cents[index] }))
+    .sort((a, b) => b.remainder - a.remainder || a.index - b.index);
+  let remaining = Math.min(Math.round(total), centCap) - cents.reduce((sum, value) => sum + value, 0);
+  for (const { index } of order) {
+    if (remaining <= 0) break;
+    cents[index] += 1;
+    remaining -= 1;
+  }
+  // Floating-point fraction totals can exceed the cap by a tiny amount.
+  // If even the floored stakes exceed it, remove cents before returning them.
+  for (let rank = order.length - 1; rank >= 0 && remaining < 0; rank--) {
+    const { index } = order[rank];
+    const reduction = Math.min(cents[index], -remaining);
+    cents[index] -= reduction;
+    remaining += reduction;
+  }
+
+  let spent = 0;
+  return cents.map((value) => {
+    let dollars = value / 100;
+    if (spent + dollars > maxDollars) {
+      value = Math.max(0, Math.min(value, Math.floor((maxDollars - spent) * 100)));
+      dollars = value / 100;
+      // Converting integer cents back to doubles must not cross the cap either.
+      while (spent + dollars > maxDollars && value > 0) dollars = --value / 100;
+    }
+    spent += dollars;
+    return dollars;
+  });
 }
 
 // ─── Simultaneous & Mutually Exclusive Kelly ──────────────────────────────────

@@ -690,9 +690,85 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
         { winProbability: 0.58, americanOdds: -110 },
       ], 0.20);
       const totalFraction = portfolio.reduce((sum, b) => sum + b.fraction, 0);
-      // Each fraction rounds to 4 decimals; total may equal maxExposure exactly or
-      // trail by ≤1ulp due to rounding, so use toBeCloseTo instead of a hard bound.
+      // Independent rounding used to turn three equal stakes into 0.2001.
+      expect(totalFraction).toBeLessThanOrEqual(0.20);
       expect(totalFraction).toBeCloseTo(0.20, 3);
+      expect(portfolio.reduce((sum, b) => sum + b.dollars(1000), 0)).toBeLessThanOrEqual(200);
+    });
+
+    it.each([-1, 1.1, Number.NaN, Infinity])('rejects invalid exposure %s', (cap) => {
+      expect(() => kellyPortfolio([], cap)).toThrow(RangeError);
+    });
+
+    it.each([-1, Number.NaN, Infinity])('rejects invalid multiplier %s', (multiplier) => {
+      expect(() => kellyPortfolio([
+        { winProbability: 0.58, americanOdds: -110, multiplier },
+      ])).toThrow(RangeError);
+    });
+
+    it('supports an explicit zero-exposure portfolio', () => {
+      const portfolio = kellyPortfolio([
+        { winProbability: 0.58, americanOdds: -110 },
+      ], 0);
+      expect(portfolio[0].fraction).toBe(0);
+      expect(portfolio[0].dollars(1000)).toBe(0);
+      expect(portfolio[0].dollars(Number.MAX_VALUE)).toBe(0);
+    });
+
+    it('preserves fraction amounts when stakes already resolve to whole cents', () => {
+      const portfolio = kellyPortfolio([
+        { winProbability: 0.58, americanOdds: -110 },
+        { winProbability: 0.58, americanOdds: -110 },
+        { winProbability: 0.58, americanOdds: -110 },
+      ], 0.2);
+      for (const bet of portfolio) {
+        expect(bet.dollars(1000)).toBe(Math.round(100000 * bet.fraction) / 100);
+      }
+    });
+
+    it('allocates cents jointly without exceeding a $5 portfolio cap', () => {
+      const portfolio = kellyPortfolio(Array.from({ length: 3 }, () => ({
+        winProbability: 0.58, americanOdds: -110,
+      })), 0.2);
+
+      expect(portfolio.map((bet) => bet.dollars(25))).toEqual([1.66, 1.67, 1.67]);
+      for (const bankroll of [0, 0.01, 0.03, 0.1, 0.3, 25.01, 1000]) {
+        expect(portfolio.reduce((sum, bet) => sum + bet.dollars(bankroll), 0))
+          .toBeLessThanOrEqual(bankroll * 0.2);
+      }
+      expect(portfolio.reduce((sum, bet) => sum + bet.dollars(25), 0)).toBeLessThanOrEqual(5);
+      // The allocation must not depend on call order or the previously used bankroll.
+      expect(portfolio.slice().reverse().map((bet) => bet.dollars(1))).toEqual([0.07, 0.07, 0.06]);
+      expect(portfolio.map((bet) => bet.dollars(25))).toEqual([1.66, 1.67, 1.67]);
+    });
+
+    it('does not round a sub-cent exposure cap up to a cent', () => {
+      const portfolio = kellyPortfolio([
+        { winProbability: 0.58, americanOdds: -110 },
+      ], 0.0099);
+      expect(portfolio[0].dollars(1)).toBe(0);
+    });
+
+    it('preserves exact cent caps despite floating-point multiplication', () => {
+      const portfolio = kellyPortfolio([
+        { winProbability: 0.9, americanOdds: 100 },
+      ], 0.58);
+      expect(portfolio[0].dollars(1)).toBe(0.58);
+    });
+
+    it('resolves equal cent remainders in input order without funding zero stakes', () => {
+      const portfolio = kellyPortfolio([
+        { winProbability: 0.55, americanOdds: 100, multiplier: 0 },
+        ...Array.from({ length: 3 }, () => ({ winProbability: 0.55, americanOdds: 100 })),
+      ], 1);
+      expect(portfolio.map((bet) => bet.dollars(0.05))).toEqual([0, 0.01, 0.01, 0]);
+    });
+
+    it.each([-1, Number.NaN, Infinity, Number.MAX_VALUE])('rejects an invalid or unrepresentable cent bankroll %s', (bankroll) => {
+      const portfolio = kellyPortfolio([
+        { winProbability: 0.58, americanOdds: -110 },
+      ]);
+      expect(() => portfolio[0].dollars(bankroll)).toThrow(RangeError);
     });
 
     it('does not scale if total fraction within max exposure', () => {
