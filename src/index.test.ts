@@ -5,6 +5,7 @@ import {
   arbitrage,
   bankrollStats,
   clvSummary,
+  clvByBook,
   rollingClvSummary,
   betPnL,
   kellyPortfolio,
@@ -601,6 +602,23 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
       expect(Number.isFinite(result.avgCLV)).toBe(true);
       expect(result.avgCLV).toBe(0);
       expect(result.beatCloseRate).toBe(0);
+    });
+  });
+
+  describe('clvByBook()', () => {
+    it('preserves book order and agrees with a separate summary of each book', () => {
+      const a = { book: 'Book A', openLine: 120, closeLine: 105 };
+      const b = { book: '__proto__', openLine: -115, closeLine: -110 };
+      const tied = { book: ' Book A ', openLine: -110, closeLine: -110 };
+      expect(clvByBook([a, b, tied])).toEqual([
+        { book: a.book, ...clvSummary([a, tied]) },
+        { book: b.book, ...clvSummary([b]) },
+      ]);
+    });
+
+    it('handles empty journals and rejects missing book names', () => {
+      expect(clvByBook([])).toEqual([]);
+      expect(() => clvByBook([{ book: ' ', openLine: 120, closeLine: 105 }])).toThrow(/book/);
     });
   });
 

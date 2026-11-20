@@ -159,6 +159,22 @@ clvSummary(bets)
 rollingClvSummary(bets, windowSize)  // contiguous window summaries over a season
 ```
 
+Compare ticket prices across sportsbooks with `clvByBook`. Each result includes
+the book name, bet count, average CLV, beat-close rate, and verdict. Results
+follow the books' first appearance in the journal. Names are case-sensitive
+and surrounding whitespace is ignored.
+
+```ts
+import { clvByBook } from '@ianalloway/kelly-js';
+
+const summaries = clvByBook([
+  { book: 'Book A', openLine: +120, closeLine: +105 },
+  { book: 'Book B', openLine: -115, closeLine: -110 },
+  { book: 'Book A', openLine: -110, closeLine: -110 },
+]);
+// summaries[0].totalBets === 2; summaries[0].beatCloseRate === 0.5
+```
+
 ### Bankroll tracking
 
 ```ts

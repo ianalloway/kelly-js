@@ -1131,6 +1131,22 @@ export function clvSummary(
   return summarizeClvResults(bets.map((b) => clv(b.openLine, b.closeLine)));
 }
 
+/** Summarize a bet journal by sportsbook in order of first appearance. */
+export function clvByBook(
+  bets: ReadonlyArray<{ book: string; openLine: number; closeLine: number }>
+): Array<CLVSummary & { book: string }> {
+  const byBook = new Map<string, CLVResult[]>();
+  for (const bet of bets) {
+    const book = bet.book.trim();
+    if (!book) throw new RangeError('book must contain a sportsbook name');
+    const group = byBook.get(book);
+    const result = clv(bet.openLine, bet.closeLine);
+    if (group) group.push(result);
+    else byBook.set(book, [result]);
+  }
+  return Array.from(byBook, ([book, results]) => ({ book, ...summarizeClvResults(results) }));
+}
+
 export interface RollingCLVWindow extends CLVSummary {
   /** Inclusive start index into the original bets array */
   startIndex: number;
