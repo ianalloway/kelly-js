@@ -678,7 +678,9 @@ function exactSimultaneousKelly(
       );
       let move = 0;
       for (let i = 0; i < n; i++) move += Math.abs(projected[i] - f[i]);
-      if (move < 1e-12) break;
+      // Below this residual, further line searches chase floating-point noise.
+      // Returned allocations are rounded to four decimal places.
+      if (move < 1e-8) break;
       step = Math.max(1e-6, step * 0.5);
     }
   }

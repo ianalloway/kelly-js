@@ -884,7 +884,20 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
         probability: 0.55,
         decimalOdds: 2.0,
       }));
-      expect(simultaneousKelly(bets).method).toBe('exact');
+      const solved = simultaneousKelly(bets);
+      expect(solved.method).toBe('exact');
+      expect(solved.fractions).toEqual(Array(bets.length).fill(0.0827));
+      expect(solved.logGrowth).toBeCloseTo(0.05609372, 8);
+    });
+
+    it('keeps the all-cash solution at the exact size limit for fair bets', () => {
+      const bets = Array.from({ length: SIMULTANEOUS_KELLY_EXACT_MAX }, () => ({
+        probability: 0.5,
+        decimalOdds: 2,
+      }));
+      const solved = simultaneousKelly(bets);
+      expect(solved.fractions).toEqual(Array(bets.length).fill(0));
+      expect(solved.logGrowth).toBe(0);
     });
 
     it('falls back to approximation for n > SIMULTANEOUS_KELLY_EXACT_MAX', () => {

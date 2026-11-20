@@ -327,3 +327,5 @@ Until that publish succeeds, install from npm may still resolve an older version
 ## License
 
 [MIT](LICENSE)
+
+The simultaneous solver enumerates up to 4,096 outcomes for 12 independent bets. It returns allocations to four decimal places. Larger inputs use the documented approximation.
