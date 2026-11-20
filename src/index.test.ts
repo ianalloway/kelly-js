@@ -4,6 +4,7 @@ import {
   toAmerican,
   arbitrage,
   bankrollStats,
+  drawdownPeriods,
   clvSummary,
   clvByBook,
   rollingClvSummary,
@@ -1747,5 +1748,40 @@ describe('kelly-js: Kelly Criterion & Sports Betting Analytics', () => {
       expect(() => hedgeBet(0, 200, -150)).toThrow(RangeError);
       expect(() => hedgeBet(-100, 200, -150)).toThrow(RangeError);
     });
+  });
+});
+
+describe('drawdownPeriods', () => {
+  const settled = (stake: number, result: 'win' | 'loss' | 'push') =>
+    ({ stake, result, americanOdds: 100 });
+
+  it('locates the deepest trough, exact recovery, and an open second period', () => {
+    const bets = [
+      settled(5, 'win'), settled(1, 'push'), settled(15, 'loss'), settled(5, 'win'),
+      settled(10, 'loss'), settled(20, 'win'), settled(1, 'loss'),
+    ];
+    expect(drawdownPeriods(bets, 100)).toEqual([
+      { peakAfterBet: 2, troughAfterBet: 5, recoveredAfterBet: 6,
+        peakBankroll: 105, troughBankroll: 85, maxDrawdown: 20 / 105 },
+      { peakAfterBet: 6, troughAfterBet: 7, recoveredAfterBet: null,
+        peakBankroll: 105, troughBankroll: 104, maxDrawdown: 1 / 105 },
+    ]);
+  });
+
+  it('recognizes a cent-accurate recovery and keeps the earliest tied trough', () => {
+    const bets = [settled(0.3, 'loss'), settled(1, 'push'), settled(0.1, 'win'), settled(0.2, 'win')];
+    expect(drawdownPeriods(bets, 1)[0]).toEqual({
+      peakAfterBet: 0, troughAfterBet: 1, recoveredAfterBet: 4,
+      peakBankroll: 1, troughBankroll: 0.7, maxDrawdown: 0.3,
+    });
+  });
+
+  it('handles empty and rising balances and rejects invalid inputs', () => {
+    expect(drawdownPeriods([])).toEqual([]);
+    expect(drawdownPeriods([settled(2, 'win'), settled(1, 'push')])).toEqual([]);
+    for (const balance of [0, -1, Infinity, NaN]) {
+      expect(() => drawdownPeriods([], balance)).toThrow(RangeError);
+    }
+    expect(() => drawdownPeriods([settled(-1, 'loss')])).toThrow(RangeError);
   });
 });

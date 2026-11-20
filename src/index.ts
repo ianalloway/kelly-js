@@ -1221,6 +1221,64 @@ export function betPnL(stake: number, americanOdds: number, result: 'win' | 'los
   };
 }
 
+export interface DrawdownPeriod {
+  /** Number of settled bets at each landmark; zero means the starting balance. */
+  peakAfterBet: number;
+  troughAfterBet: number;
+  /** Null when the peak has not been regained by the end of the journal. */
+  recoveredAfterBet: number | null;
+  peakBankroll: number;
+  troughBankroll: number;
+  /** Largest loss in the period, as a fraction of the preceding peak. */
+  maxDrawdown: number;
+}
+
+/** Identify peak-to-recovery periods in settlement order, including the final open period. */
+export function drawdownPeriods(
+  bets: ReadonlyArray<{ stake: number; americanOdds: number; result: 'win' | 'loss' | 'push' }>,
+  startingBankroll = 1000
+): DrawdownPeriod[] {
+  if (!Number.isFinite(startingBankroll) || startingBankroll <= 0) {
+    throw new RangeError('startingBankroll must be a positive finite number');
+  }
+
+  const periods: DrawdownPeriod[] = [];
+  let netCents = 0;
+  let peakCents = 0;
+  let peakAfterBet = 0;
+  let open: DrawdownPeriod | undefined;
+  let troughCents = 0;
+  for (const [index, bet] of bets.entries()) {
+    const afterBet = index + 1;
+    // Settlement P&L is cent-rounded. Compare cumulative cents so an exact
+    // recovery cannot be missed through floating-point balance addition.
+    netCents += Math.round(betPnL(bet.stake, bet.americanOdds, bet.result).pnl * 100);
+    if (netCents >= peakCents) {
+      if (open) open.recoveredAfterBet = afterBet;
+      open = undefined;
+      peakAfterBet = afterBet;
+      peakCents = netCents;
+      continue;
+    }
+    if (!open || netCents < troughCents) {
+      const peakBankroll = startingBankroll + peakCents / 100;
+      const troughBankroll = startingBankroll + netCents / 100;
+      const maxDrawdown = ((peakCents - netCents) / 100) / peakBankroll;
+      if (open) {
+        open.troughAfterBet = afterBet;
+        open.troughBankroll = troughBankroll;
+        open.maxDrawdown = maxDrawdown;
+      } else {
+        open = { peakAfterBet, troughAfterBet: afterBet, recoveredAfterBet: null,
+          peakBankroll, troughBankroll, maxDrawdown };
+        periods.push(open);
+      }
+      troughCents = netCents;
+    }
+  }
+  return periods;
+}
+
 /**
  * Compute comprehensive bankroll statistics from a history of bets.
  * Includes Sharpe ratio to measure risk-adjusted returns.

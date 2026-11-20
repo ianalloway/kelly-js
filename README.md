@@ -182,6 +182,18 @@ betPnL(stake, americanOdds, result)
 bankrollStats(bets, startingBankroll?)
 ```
 
+Use `drawdownPeriods(bets, startingBankroll)` to find when each losing stretch began, reached its lowest balance, and recovered. Pass settled bets in chronological order. Positions count settled bets, with zero representing the initial balance. A drawdown that is still open has `recoveredAfterBet: null`.
+
+```ts
+import { drawdownPeriods } from '@ianalloway/kelly-js';
+
+const [dip] = drawdownPeriods([
+  { stake: 10, americanOdds: 100, result: 'loss' },
+  { stake: 10, americanOdds: 100, result: 'win' },
+], 100);
+// peakAfterBet: 0, troughAfterBet: 1, recoveredAfterBet: 2, maxDrawdown: 0.1
+```
+
 ### Monte Carlo growth simulation
 
 ```ts
